@@ -1,7 +1,6 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { SKKNTemplate, SKKNSection } from '../types';
 import { extractSKKNStructure } from '../services/geminiService';
-import { GoogleGenAI } from '@google/genai';
 import * as pdfjsLib from 'pdfjs-dist';
 import mammoth from 'mammoth';
 import { Upload, FileText, CheckCircle, Loader2, ArrowRight, Sparkles, AlertTriangle, X, ChevronDown, ChevronUp } from 'lucide-react';
@@ -81,39 +80,7 @@ export const TemplateUploadStep: React.FC<Props> = ({
             const arrayBuffer = await file.arrayBuffer();
             let extractedText = '';
 
-            const isImage = file.type.startsWith('image/') || /\.(png|jpg|jpeg|webp|bmp|gif)$/i.test(file.name);
-
-            if (isImage) {
-                // Xử lý ảnh: chuyển base64 → gửi Gemini Vision API đọc nội dung
-                setProgress('Đang đọc ảnh bằng AI...');
-                const base64 = await new Promise<string>((resolve) => {
-                    const reader = new FileReader();
-                    reader.onload = (e) => {
-                        const result = e.target?.result as string;
-                        resolve(result.split(',')[1]); // Bỏ prefix "data:image/...;base64,"
-                    };
-                    reader.readAsDataURL(file);
-                });
-
-                try {
-                    const ai = new GoogleGenAI({ apiKey });
-                    const response = await ai.models.generateContent({
-                        model: selectedModel || 'gemini-2.0-flash',
-                        contents: [{
-                            role: 'user',
-                            parts: [
-                                { inlineData: { mimeType: file.type || 'image/png', data: base64 } },
-                                { text: 'Đọc và trích xuất TOÀN BỘ nội dung văn bản trong ảnh này. Giữ nguyên cấu trúc, đánh số mục, tiêu đề. Trả về plain text, không markdown.' }
-                            ]
-                        }]
-                    });
-                    extractedText = response.text || '';
-                } catch (imgErr: any) {
-                    setError('Không thể đọc ảnh: ' + imgErr.message);
-                    setIsProcessing(false);
-                    return;
-                }
-            } else if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+            if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
                 extractedText = await extractTextFromPdf(arrayBuffer, setProgress);
             } else if (
                 file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
@@ -283,7 +250,7 @@ export const TemplateUploadStep: React.FC<Props> = ({
                                         ref={fileInputRef}
                                         onChange={handleFileSelect}
                                         className="hidden"
-                                        accept=".pdf,.docx,.txt,.png,.jpg,.jpeg,.webp"
+                                        accept=".pdf,.docx,.txt"
                                     />
 
                                     <div className="text-center">
@@ -306,7 +273,7 @@ export const TemplateUploadStep: React.FC<Props> = ({
                                                     Kéo thả file vào đây hoặc <span className="text-blue-600 underline">chọn file</span>
                                                 </p>
                                                 <p className="text-gray-400 text-xs">
-                                                    Hỗ trợ: PDF, Word (.docx), TXT, Ảnh (PNG/JPG) • Tối đa 100MB
+                                                    Hỗ trợ: PDF, Word (.docx), TXT • Tối đa 100MB
                                                 </p>
                                             </>
                                         )}
