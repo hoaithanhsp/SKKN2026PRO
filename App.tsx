@@ -223,10 +223,35 @@ const App: React.FC = () => {
   }, [userInfo.customTemplate]);
 
   const validCustomSections = useMemo(() => {
-    if (!customTemplateData || !customTemplateData.sections) return [];
-    // Ưu tiên lấy các phần mục lớn (level 1). Nếu không có, lấy tất cả.
-    const mainSections = customTemplateData.sections.filter((s: any) => s.level === 1);
-    return mainSections.length > 0 ? mainSections : customTemplateData.sections;
+    // Chiến lược gom nhóm (chunking):
+    // - Lấy mục Level 1 nếu nó KHÔNG có mục Level 2 nào làm con (nó là mục độc lập).
+    // - Lấy các mục Level 2 (bỏ qua Level 3+ vì sẽ được gán chung vào yêu cầu của Level 2 để AI viết).
+    const result = [];
+    const sections = customTemplateData.sections;
+
+    for (let i = 0; i < sections.length; i++) {
+      const current = sections[i];
+
+      if (current.level === 1) {
+        let hasLevel2Child = false;
+        // Kiểm tra xem dưới level 1 này có level 2 nào không, trước khi nhảy sang level 1 khác
+        for (let j = i + 1; j < sections.length; j++) {
+          if (sections[j].level === 1) break;
+          if (sections[j].level === 2) {
+            hasLevel2Child = true;
+            break;
+          }
+        }
+
+        if (!hasLevel2Child) {
+          result.push(current);
+        }
+      } else if (current.level === 2) {
+        result.push(current);
+      }
+    }
+
+    return result.length > 0 ? result : sections;
   }, [customTemplateData]);
 
   const isCustomFlow = validCustomSections.length > 0;
