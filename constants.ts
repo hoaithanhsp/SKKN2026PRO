@@ -428,29 +428,45 @@ VIẾT PHẦN IV: GIẢI PHÁP THỰC HIỆN (10-15 trang) cho một đề tài 
 📋  CẤU TRÚC CHI TIẾT CHO MỖI GIẢI PHÁP (TEMPLATE BẮT BUỘC)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+🚨🚨🚨 NGUYÊN TẮC QUAN TRỌNG NHẤT 🚨🚨🚨
+- NỘI DUNG GIẢI PHÁP LÀ CỐT LÕI, chiếm ít nhất 70-80% dung lượng mỗi giải pháp.
+- TUYỆT ĐỐI KHÔNG LIỆT KÊ SƠ SÀI (bullet points ngắn gọn) → PHẢI VIẾT ĐOẠN VĂN CHUYÊN SÂU.
+- Mỗi bước thực hiện phải có MÔ TẢ CHI TIẾT: Giáo viên làm gì? Học sinh làm gì? Diễn biến thế nào? Kết quả ra sao?
+- PHẢI CÓ VÍ DỤ MINH HỌA CỤ THỂ: Tên bài học, tình huống sư phạm, lời thoại thầy trò.
+
 GIẢI PHÁP [SỐ]: [TÊN GỌI CỤ THỂ, ẤN TƯỢNG]
 
-1. MỤC TIÊU CỦA GIẢI PHÁP (0.5 trang)
-   • Giải quyết vấn đề gì? Hình thành năng lực gì?
-   • Đối tượng hưởng lợi cụ thể.
+1. NỘI DUNG VÀ QUY TRÌNH THỰC HIỆN (2-3 trang - PHẦN QUAN TRỌNG NHẤT)
+   ⚠️ ĐÂY LÀ PHẦN CỐT LÕI - PHẢI VIẾT SÂU, CHI TIẾT, KHÔNG ĐƯỢC LIỆT KÊ!
+   
+   📌 Cách viết ĐÚNG:
+   - Viết thành ĐOẠN VĂN LIÊN MẠC, mô tả chi tiết từng nội dung, từng bước.
+   - Mỗi bước PHẢI có: Tên bước → Mô tả cách triển khai (3-5 câu) → Vai trò GV/HS → Sản phẩm/kết quả.
+   - Phải có 5-7 bước chi tiết, mỗi bước là 1-2 đoạn văn (không phải 1 dòng).
+   
+   ❌ Cách viết SAI (chỉ liệt kê):
+   - Bước 1: Chuẩn bị
+   - Bước 2: Triển khai  
+   - Bước 3: Đánh giá
+   
+   ✅ Cách viết ĐÚNG (mô tả sâu):
+   "Bước 1: Khảo sát và phân nhóm năng lực. Trước khi triển khai giải pháp, giáo viên tiến hành 
+   khảo sát năng lực đầu vào của học sinh thông qua bài kiểm tra trắc nghiệm 20 câu kết hợp 
+   quan sát trực tiếp trong 2 tiết học đầu. Kết quả khảo sát tại lớp 10A3 cho thấy 31/42 em 
+   (73,8%) gặp khó khăn trong kỹ năng phân tích đề bài. Căn cứ vào kết quả này, giáo viên 
+   phân chia lớp thành 4 nhóm theo năng lực..."
 
-2. CƠ SỞ KHOA HỌC CỦA GIẢI PHÁP (0.5 trang)
-   • Diễn giải lý thuyết và liên hệ thực tế trường học.
+2. VÍ DỤ MINH HỌA THỰC TẾ (1 trang - BẮT BUỘC)
+   - Bài học áp dụng: [Tên bài SGK cụ thể]
+   - MÔ TẢ KỊCH BẢN BÀI HỌC CHI TIẾT: Từng hoạt động (Khởi động, Khám phá, Luyện tập, Vận dụng)
+   - Có tình huống sư phạm, lời thoại GV/HS, phản ứng của lớp.
+   - Nếu là Toán: Sử dụng LaTeX cho công thức ($...$, $$...$$).
 
-3. NỘI DUNG VÀ QUY TRÌNH THỰC HIỆN (1.5-2 trang)
-   • Bước 1: [TÊN BƯỚC] -> GV làm gì? HS làm gì?
-   • Bước 2: [TÊN BƯỚC] ...
-   • ... (5-7 bước chi tiết)
+3. BỘ CÔNG CỤ HỖ TRỢ & ĐÁNH GIÁ (0.5 trang)
+   - Mô tả Phiếu học tập, Rubric đánh giá, hoặc Prompt AI (nếu phù hợp).
+   - Bảng tiêu chí đánh giá kèm thang điểm cụ thể.
 
-4. VÍ DỤ MINH HỌA THỰC TẾ (1 trang - BẮT BUỘC)
-   • Bài học áp dụng: [Tên bài SGK]
-   • Mô tả hoạt động sư phạm cụ thể, kịch bản, lời thoại GV/HS.
-   • Nếu là Toán: Sử dụng LaTeX cho công thức ($...$, $$...$$).
-
-5. BỘ CÔNG CỤ HỖ TRỢ (0.5 trang)
-   • Mô tả Phiếu học tập, Rubric đánh giá, Prompt AI...
-
-6. ĐIỀU KIỆN THỰC HIỆN & LƯU Ý (0.5 trang)
+4. ĐIỀU KIỆN THỰC HIỆN & LƯU Ý (0.5 trang)
 
 ${SOLUTION_GUIDE}
 
