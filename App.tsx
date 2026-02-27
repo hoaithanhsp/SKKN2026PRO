@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { UserInfo, GenerationStep, GenerationState, SKKNTemplate, SolutionsState, WizardStep } from './types';
 import { STEPS_INFO, SOLUTION_MODE_PROMPT, FALLBACK_MODELS, HIGHER_ED_LEVELS, HIGHER_ED_SYSTEM_INSTRUCTION } from './constants';
 import { initializeGeminiChat, sendMessageStream, getFriendlyErrorMessage, parseApiError, getChatHistory, setChatHistory } from './services/geminiService';
 import { apiKeyManager } from './services/apiKeyManager';
 import { getSubjectInfo } from './data/subjectsData';
-import { OUTLINE_GUIDE, INTRO_GUIDE, THEORY_GUIDE, REALITY_GUIDE, RESULT_GUIDE, CONCLUSION_GUIDE, APPENDIX_GUIDE } from './data/skknKnowledgeBase';
+import { OUTLINE_GUIDE, INTRO_GUIDE, THEORY_GUIDE, REALITY_GUIDE, RESULT_GUIDE, CONCLUSION_GUIDE, APPENDIX_GUIDE, NATURAL_WRITING_TECHNIQUES } from './data/skknKnowledgeBase';
 import { SKKNForm } from './components/SKKNForm';
 import { TemplateUploadStep } from './components/TemplateUploadStep';
 import { DocumentPreview } from './components/DocumentPreview';
@@ -215,6 +215,50 @@ const App: React.FC = () => {
   });
 
   // ═══════════════════════════════════════════════════════════
+  // CUSTOM TEMPLATE DYNAMIC STEPS LOGIC
+  // ═══════════════════════════════════════════════════════════
+  const customTemplateData = useMemo(() => {
+    try {
+      return userInfo.customTemplate ? JSON.parse(userInfo.customTemplate) as SKKNTemplate : null;
+    } catch { return null; }
+  }, [userInfo.customTemplate]);
+
+  const validCustomSections = useMemo(() => {
+    if (!customTemplateData || !customTemplateData.sections) return [];
+    // Ưu tiên lấy các phần mục lớn (level 1). Nếu không có, lấy tất cả.
+    const mainSections = customTemplateData.sections.filter((s: any) => s.level === 1);
+    return mainSections.length > 0 ? mainSections : customTemplateData.sections;
+  }, [customTemplateData]);
+
+  const isCustomFlow = validCustomSections.length > 0;
+
+  const currentStepsInfo = useMemo(() => {
+    if (!isCustomFlow) return STEPS_INFO;
+
+    const info: Record<number, { label: string, description: string }> = {
+      0: { label: "Thông tin", description: "Thiết lập thông tin cơ bản" },
+      1: { label: "Lập Dàn Ý", description: "Xây dựng khung sườn cho SKKN" },
+    };
+
+    validCustomSections.forEach((section: any, idx: number) => {
+      info[2 + idx] = {
+        label: section.title.length > 25 ? section.title.substring(0, 25) + '...' : section.title,
+        description: `Viết mục: ${section.title}`
+      };
+    });
+
+    const appendixStep = 2 + validCustomSections.length;
+    const completedStep = appendixStep + 1;
+    info[appendixStep] = { label: "Tạo Phụ lục", description: "Tài liệu phụ lục" };
+    info[completedStep] = { label: "Hoàn tất", description: "Đã xong" };
+
+    return info;
+  }, [isCustomFlow, validCustomSections]);
+
+  const COMPLETED_STEP_ID = isCustomFlow ? 2 + validCustomSections.length + 1 : GenerationStep.COMPLETED;
+
+
+  // ═══════════════════════════════════════════════════════════
   // SESSION PERSISTENCE: Tự động lưu phiên vào localStorage
   // ═══════════════════════════════════════════════════════════
 
@@ -373,11 +417,11 @@ const App: React.FC = () => {
 
     const section = alloc[sectionKey];
     return `
-🚨 GIỚI HẠN SỐ TRANG CHO PHẦN NÀY (BẮT BUỘC):
-📌 ${sectionName}: PHẢI viết khoảng ${section.pages} TRANG (≈ ${section.words.toLocaleString()} từ ≈ ${section.chars.toLocaleString()} ký tự)
+🚨 GIỚI HẠN SỐ TRANG CHO PHẦN NÀY(BẮT BUỘC):
+📌 ${sectionName}: PHẢI viết khoảng ${section.pages} TRANG(≈ ${section.words.toLocaleString()} từ ≈ ${section.chars.toLocaleString()} ký tự)
 ⚠️ Trong tổng ${alloc.totalPages} trang SKKN, phần này chiếm ${section.pages} trang.
 🚫 KHÔNG viết quá ${Math.ceil(section.pages * 1.15)} trang và KHÔNG viết dưới ${Math.max(1, Math.floor(section.pages * 0.85))} trang.
-✅ Viết CÔ ĐỌNG, SÚC TÍCH nhưng ĐẦY ĐỦ NỘI DUNG. Ưu tiên bảng biểu để tiết kiệm không gian.
+✅ Viết CÔ ĐỌNG, SÚC TÍCH nhưng ĐẦY ĐỦ NỘI DUNG.Ưu tiên bảng biểu để tiết kiệm không gian.
 `;
   }, [getPageAllocation]);
 
@@ -396,9 +440,9 @@ const App: React.FC = () => {
 🚨🚨🚨 GIỚI HẠN SỐ TRANG - BẮT BUỘC TUYỆT ĐỐI 🚨🚨🚨
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-📌 TỔNG SỐ TRANG YÊU CẦU: ${alloc.totalPages} TRANG (không tính Dàn ý và Phụ lục)
+📌 TỔNG SỐ TRANG YÊU CẦU: ${alloc.totalPages} TRANG(không tính Dàn ý và Phụ lục)
 
-📐 QUY ĐỔI CHUẨN (Font 13pt, Line spacing 1.5):
+📐 QUY ĐỔI CHUẨN(Font 13pt, Line spacing 1.5):
 • 1 trang A4 ≈ ${alloc.wordsPerPage} từ ≈ ${alloc.charsPerPage} ký tự
 • TỔNG CHO ${alloc.totalPages} TRANG: ≈ ${alloc.totalWords.toLocaleString()} từ ≈ ${alloc.totalChars.toLocaleString()} ký tự
 
@@ -408,16 +452,16 @@ const App: React.FC = () => {
 ├──────────────────────────────────────────────────────────────────┤
 │ Phần I & II         │ ${alloc.partI_II.pages} trang    │ ~${alloc.partI_II.words.toLocaleString()} từ      │ ~${alloc.partI_II.chars.toLocaleString()} ký tự     │
 │ Phần III            │ ${alloc.partIII.pages} trang    │ ~${alloc.partIII.words.toLocaleString()} từ      │ ~${alloc.partIII.chars.toLocaleString()} ký tự     │
-│ Phần IV (${alloc.numSolutions} GP)    │ ${alloc.partIV.pages} trang   │ ~${alloc.partIV.words.toLocaleString()} từ     │ ~${alloc.partIV.chars.toLocaleString()} ký tự    │
+│ Phần IV(${alloc.numSolutions} GP)    │ ${alloc.partIV.pages} trang   │ ~${alloc.partIV.words.toLocaleString()} từ     │ ~${alloc.partIV.chars.toLocaleString()} ký tự    │
 │  → Mỗi giải pháp   │ ${alloc.perSolution.pages} trang    │ ~${alloc.perSolution.words.toLocaleString()} từ      │ ~${alloc.perSolution.chars.toLocaleString()} ký tự     │
 │ Phần V & VI + KL    │ ${alloc.partV_VI.pages} trang    │ ~${alloc.partV_VI.words.toLocaleString()} từ      │ ~${alloc.partV_VI.chars.toLocaleString()} ký tự     │
 └──────────────────────────────────────────────────────────────────┘
 
 ⚠️ QUY TẮC NGHIÊM NGẶT:
-1. MỖI ĐOẠN VĂN: Tối đa 3-4 câu (≈ 60-80 từ)
-2. MỖI MỤC NHỎ: Tối đa 5-7 đoạn văn
+1. MỖI ĐOẠN VĂN: Tối đa 3 - 4 câu(≈ 60 - 80 từ)
+2. MỖI MỤC NHỎ: Tối đa 5 - 7 đoạn văn
 3. KHÔNG lặp lại ý, KHÔNG viết dư thừa
-4. VÍ DỤ MINH HỌA: Chỉ 1-2 ví dụ ngắn gọn/giải pháp (trừ khi yêu cầu thêm)
+4. VÍ DỤ MINH HỌA: Chỉ 1 - 2 ví dụ ngắn gọn / giải pháp(trừ khi yêu cầu thêm)
 5. BẢNG BIỂU: Giúp tiết kiệm không gian - ưu tiên sử dụng
 
 🚫 CẢNH BÁO: NẾU VƯỢT QUÁ ${alloc.totalPages} TRANG → VI PHẠM YÊU CẦU!
@@ -428,10 +472,10 @@ const App: React.FC = () => {
     if (userInfo.includePracticalExamples) {
       requirements.push(`
 📊 YÊU CẦU THÊM BÀI TOÁN THỰC TẾ, VÍ DỤ MINH HỌA:
-- Mỗi giải pháp PHẢI có ít nhất 2-3 ví dụ thực tế cụ thể
-- Bài toán thực tế phải gắn với đời sống, công việc, nghề nghiệp
-- Ví dụ minh họa phải chi tiết, có thể áp dụng ngay
-- Ưu tiên các ví dụ từ SGK ${userInfo.textbook || "hiện hành"}`);
+- Mỗi giải pháp PHẢI có ít nhất 2 - 3 ví dụ thực tế cụ thể
+  - Bài toán thực tế phải gắn với đời sống, công việc, nghề nghiệp
+    - Ví dụ minh họa phải chi tiết, có thể áp dụng ngay
+      - Ưu tiên các ví dụ từ SGK ${userInfo.textbook || "hiện hành"} `);
     }
 
     // 3. Bổ sung bảng biểu, số liệu thống kê
@@ -439,10 +483,10 @@ const App: React.FC = () => {
       requirements.push(`
 📈 YÊU CẦU BỔ SUNG BẢNG BIỂU, SỐ LIỆU THỐNG KÊ:
 - Mỗi phần quan trọng PHẢI có bảng biểu hoặc số liệu minh họa
-- Sử dụng số liệu lẻ tự nhiên (42.3%, 67.8%) thay vì số tròn
-- Bảng số liệu phải rõ ràng, format Markdown chuẩn
-- Có biểu đồ gợi ý khi cần thiết
-- Số liệu phải logic và nhất quán trong toàn bài`);
+  - Sử dụng số liệu lẻ tự nhiên(42.3 %, 67.8 %) thay vì số tròn
+    - Bảng số liệu phải rõ ràng, format Markdown chuẩn
+      - Có biểu đồ gợi ý khi cần thiết
+        - Số liệu phải logic và nhất quán trong toàn bài`);
     }
 
     // 4. Yêu cầu bổ sung khác
@@ -457,7 +501,7 @@ Hãy áp dụng CHÍNH XÁC các yêu cầu trên vào phần đang viết!`);
 
     return `
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚠️ CÁC YÊU CẦU ĐẶC BIỆT ĐÃ XÁC NHẬN (BẮT BUỘC TUÂN THỦ NGHIÊM NGẶT):
+⚠️ CÁC YÊU CẦU ĐẶC BIỆT ĐÃ XÁC NHẬN(BẮT BUỘC TUÂN THỦ NGHIÊM NGẶT):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ${requirements.join('\n')}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -476,7 +520,7 @@ ${requirements.join('\n')}
       const structureText = template.sections.map(s => {
         const indent = '  '.repeat(s.level - 1);
         const prefix = s.level === 1 ? '📌' : s.level === 2 ? '•' : '○';
-        return `${indent}${prefix} ${s.id}. ${s.title}`;
+        return `${indent}${prefix} ${s.id}. ${s.title} `;
       }).join('\n');
 
       return `
@@ -484,14 +528,14 @@ ${requirements.join('\n')}
 🚨🚨🚨 CẤU TRÚC MẪU SKKN TỪ ${template.name || 'Sở/Phòng GD'} (BẮT BUỘC TUYỆT ĐỐI) 🚨🚨🚨
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⚠️ CẢNH BÁO: Đây là CẤU TRÚC DUY NHẤT được phép sử dụng.
-🚫 TUYỆT ĐỐI KHÔNG sử dụng cấu trúc SKKN mặc định/chuẩn.
+🚫 TUYỆT ĐỐI KHÔNG sử dụng cấu trúc SKKN mặc định / chuẩn.
 ✅ BẮT BUỘC TẠO DÀN Ý VÀ NỘI DUNG THEO ĐÚNG CẤU TRÚC NÀY:
 
 ${structureText}
 
 QUY TẮC BẮT BUỘC:
-1. TẠO DÀN Ý theo ĐÚNG thứ tự và tên các phần/mục như trên
-2. KHÔNG thay đổi tên các phần lớn (level 1)
+1. TẠO DÀN Ý theo ĐÚNG thứ tự và tên các phần / mục như trên
+2. KHÔNG thay đổi tên các phần lớn(level 1)
 3. CÁC MỤC CON có thể điều chỉnh nội dung cho phù hợp đề tài nhưng PHẢI giữ nguyên cấu trúc
 4. Điền nội dung phù hợp với đề tài vào TỪNG MỤC
 5. KHÔNG sử dụng cấu trúc "Phần I, II, III, IV, V, VI" mặc định nếu mẫu có cấu trúc khác
@@ -564,47 +608,48 @@ QUY TẮC BẮT BUỘC:
       const textbookTerm = isHigherEd ? 'giáo trình' : 'SGK';
 
       const initMessage = `
-Bạn là chuyên gia giáo dục cấp quốc gia, có 20+ năm kinh nghiệm viết, thẩm định và chấm điểm Sáng kiến Kinh nghiệm (SKKN) đạt giải cấp Bộ, cấp tỉnh tại Việt Nam.
-${isHigherEd ? `
+Bạn là chuyên gia giáo dục cấp quốc gia, có 20 + năm kinh nghiệm viết, thẩm định và chấm điểm Sáng kiến Kinh nghiệm(SKKN) đạt giải cấp Bộ, cấp tỉnh tại Việt Nam.
+  ${isHigherEd ? `
 ⚠️ LƯU Ý QUAN TRỌNG: Đây là SKKN dành cho BẬC ${userInfo.level.toUpperCase()} - KHÔNG PHẢI PHỔ THÔNG.
 Phải sử dụng thuật ngữ phù hợp: "sinh viên" thay "học sinh", "giảng viên" thay "giáo viên", "giáo trình" thay "SGK", v.v.
-` : ''}
+` : ''
+        }
 NHIỆM VỤ CỦA BẠN:
-Lập DÀN Ý CHI TIẾT cho một đề tài SKKN dựa trên thông tin tôi cung cấp. Dàn ý phải đầy đủ, cụ thể, có độ sâu và đảm bảo 4 tiêu chí: Tính MỚI, Tính KHOA HỌC, Tính KHẢ THI, Tính HIỆU QUẢ.
+Lập DÀN Ý CHI TIẾT cho một đề tài SKKN dựa trên thông tin tôi cung cấp.Dàn ý phải đầy đủ, cụ thể, có độ sâu và đảm bảo 4 tiêu chí: Tính MỚI, Tính KHOA HỌC, Tính KHẢ THI, Tính HIỆU QUẢ.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🏆 10 NGUYÊN TẮC VÀNG CHỐNG ĐẠO VĂN & NÂNG TẦM CHẤT LƯỢNG (BẮT BUỘC TUÂN THỦ NGHIÊM NGẶT):
+🏆 10 NGUYÊN TẮC VÀNG CHỐNG ĐẠO VĂN & NÂNG TẦM CHẤT LƯỢNG(BẮT BUỘC TUÂN THỦ NGHIÊM NGẶT):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ⚠️ CẢNH BÁO: Bạn PHẢI tuân thủ 10 nguyên tắc sau để SKKN có tính "CON NGƯỜI", giọng điệu tự nhiên như một giáo viên thực sự đang viết sáng kiến của chính họ - là tâm huyết và sáng tạo của họ.
 
-1️⃣ KHÔNG SAO CHÉP TRỰC TIẾP (Zero Copy-Paste):
+1️⃣ KHÔNG SAO CHÉP TRỰC TIẾP(Zero Copy - Paste):
    ❌ SAI: Copy nguyên văn định nghĩa từ Wikipedia, sách giáo khoa.
    ✅ ĐÚNG: Đọc hiểu ý tưởng → Tóm tắt theo tư duy riêng → Viết bằng ngôn ngữ và văn phong riêng biệt.
 
-2️⃣ TƯ DUY VIẾT HOÀN TOÀN MỚI (Unique Thinking):
-   ❌ SAI: "Giáo dục là quốc sách hàng đầu", "Thầy cô là người lái đò" (sáo rỗng).
+2️⃣ TƯ DUY VIẾT HOÀN TOÀN MỚI(Unique Thinking):
+   ❌ SAI: "Giáo dục là quốc sách hàng đầu", "Thầy cô là người lái đò"(sáo rỗng).
    ✅ ĐÚNG: Viết câu có chiều sâu, phản ánh tư duy cá nhân của người viết.
 
 3️⃣ XỬ LÝ LÝ THUYẾT GIÁO DỤC:
    Công thức: [Diễn giải lý thuyết theo cách mới] + [Ý nghĩa với giáo dục VN hiện tại] + [Liên hệ trực tiếp đề tài tại trường cụ thể].
 
 4️⃣ XỬ LÝ VĂN BẢN PHÁP LUẬT:
-   KHÔNG trích dẫn nguyên văn các Điều, Khoản. Hãy TÓM TẮT NỘI HÀM theo cách riêng.
+   KHÔNG trích dẫn nguyên văn các Điều, Khoản.Hãy TÓM TẮT NỘI HÀM theo cách riêng.
 
 5️⃣ TẠO SỐ LIỆU ĐỘC BẢN & HỢP LÝ:
-   - Dùng số lẻ tự nhiên (42.3%, 68.7%) thay vì số tròn (40%, 50%).
-   - Tổng tỷ lệ phải = 100%. Kết quả "Sau" tốt hơn "Trước" nhưng không tuyệt đối hóa.
+- Dùng số lẻ tự nhiên(42.3 %, 68.7 %) thay vì số tròn(40 %, 50 %).
+   - Tổng tỷ lệ phải = 100 %.Kết quả "Sau" tốt hơn "Trước" nhưng không tuyệt đối hóa.
 
 6️⃣ GIẢI PHÁP CỤ THỂ HÓA:
-   ❌ Tránh: "Đổi mới phương pháp dạy học" (chung chung).
-   ✅ Phải: Đặt tên giải pháp ấn tượng và cụ thể (VD: "Thiết kế chuỗi hoạt động theo mô hình 5E kết hợp Padlet").
+   ❌ Tránh: "Đổi mới phương pháp dạy học"(chung chung).
+   ✅ Phải: Đặt tên giải pháp ấn tượng và cụ thể(VD: "Thiết kế chuỗi hoạt động theo mô hình 5E kết hợp Padlet").
 
 7️⃣ KỸ THUẬT PARAPHRASE 5 CẤP ĐỘ:
-   1. Thay đổi từ vựng (Học sinh → Người học, Giáo viên → Nhà giáo dục).
+1. Thay đổi từ vựng(Học sinh → Người học, Giáo viên → Nhà giáo dục).
    2. Đổi cấu trúc câu chủ động ↔ bị động.
-   3. Kết hợp 2-3 câu đơn thành câu phức.
-   4. Thêm trạng từ/tính từ biểu cảm.
+   3. Kết hợp 2 - 3 câu đơn thành câu phức.
+   4. Thêm trạng từ / tính từ biểu cảm.
    5. Đảo ngữ nhấn mạnh.
 
 8️⃣ CẤU TRÚC CÂU PHỨC HỢP:
@@ -614,7 +659,7 @@ Lập DÀN Ý CHI TIẾT cho một đề tài SKKN dựa trên thông tin tôi c
    Sử dụng từ khóa "đắt" giá: Hiện thực hóa, Tối ưu hóa, Cá nhân hóa, Tích hợp liên môn, Phẩm chất cốt lõi, Năng lực đặc thù, Tư duy đa chiều, Chuyển đổi số, Hệ sinh thái học tập...
 
 🔟 TỰ KIỂM TRA:
-   Trong quá trình viết, liên tục tự hỏi: "Đoạn này có quá giống văn mẫu không?". Nếu có → Viết lại ngay.
+   Trong quá trình viết, liên tục tự hỏi: "Đoạn này có quá giống văn mẫu không?".Nếu có → Viết lại ngay.
 
 💡 GIỌNG ĐIỆU YÊU CẦU:
 - Viết như một GIÁO VIÊN THỰC SỰ đang chia sẻ sáng kiến của chính mình.
@@ -622,9 +667,9 @@ Lập DÀN Ý CHI TIẾT cho một đề tài SKKN dựa trên thông tin tôi c
 - Dùng ngôn ngữ TỰ NHIÊN, CHÂN THÀNH, không máy móc hay khuôn mẫu.
 - Xen kẽ những suy nghĩ cá nhân, những quan sát thực tế từ lớp học.
 
-BẮT ĐẦU phản hồi bằng MENU NAVIGATION trạng thái Bước 2 (Lập Dàn Ý - Đang thực hiện).
+BẮT ĐẦU phản hồi bằng MENU NAVIGATION trạng thái Bước 2(Lập Dàn Ý - Đang thực hiện).
 
-${isHigherEd ? HIGHER_ED_SYSTEM_INSTRUCTION : ''}
+  ${isHigherEd ? HIGHER_ED_SYSTEM_INSTRUCTION : ''}
 
 ${OUTLINE_GUIDE}
 
@@ -633,12 +678,13 @@ THÔNG TIN ĐỀ TÀI:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 • Tên đề tài: ${userInfo.topic}
-• Môn học/Lĩnh vực: ${userInfo.subject}${(() => {
+• Môn học / Lĩnh vực: ${userInfo.subject}${(() => {
           const info = getSubjectInfo(userInfo.subject); return info ? `
   → Nhóm: ${info.group}
   → Đặc trưng: ${info.description}
   → Hãy viết nội dung SKKN bám sát đặc thù lĩnh vực "${info.name}" thuộc nhóm "${info.group}"` : '';
-        })()}
+        })()
+        }
 • Cấp học: ${userInfo.level}
 • Khối lớp / Đối tượng: ${userInfo.grade}
 • Tên ${schoolTerm}: ${userInfo.school}
@@ -647,7 +693,7 @@ THÔNG TIN ĐỀ TÀI:
 • ${textbookTerm}: ${userInfo.textbook || "Không đề cập"}
 • Đối tượng nghiên cứu: ${userInfo.researchSubjects || (isHigherEd ? "Sinh viên tại đơn vị" : "Học sinh tại đơn vị")}
 • Thời gian thực hiện: ${userInfo.timeframe || "Năm học hiện tại"}
-• Đặc thù/Công nghệ/AI: ${userInfo.applyAI ? userInfo.applyAI : ''} ${userInfo.focus ? `- ${userInfo.focus}` : ''}
+• Đặc thù / Công nghệ / AI: ${userInfo.applyAI ? userInfo.applyAI : ''} ${userInfo.focus ? `- ${userInfo.focus}` : ''}
 
 ${userInfo.referenceDocuments ? `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 TÀI LIỆU THAM KHẢO (DO GIÁO VIÊN CUNG CẤP):
@@ -657,7 +703,8 @@ Dưới đây là nội dung các tài liệu tham khảo mà giáo viên đã t
 ${truncateForPrompt(userInfo.referenceDocuments)}
 
 [HẾT TÀI LIỆU THAM KHẢO]
-` : ''}
+` : ''
+        }
 
 ${userInfo.customTemplate ? getCustomTemplatePrompt() : (userInfo.skknTemplate ? `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🚨🚨🚨 MẪU YÊU CẦU SKKN TỪ SỞ/PHÒNG GD (BẮT BUỘC TUYỆT ĐỐI) 🚨🚨🚨
@@ -678,7 +725,8 @@ NỘI DUNG MẪU SKKN (ĐÂY LÀ CẤU TRÚC DUY NHẤT ĐƯỢC PHÉP SỬ DỤ
 ${userInfo.skknTemplate}
 
 [HẾT MẪU SKKN - MỌI NỘI DUNG PHẢI TUÂN THỦ CẤU TRÚC TRÊN]
-` : '')}
+` : '')
+        }
 
 ${userInfo.specialRequirements ? `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📝 YÊU CẦU ĐẶC BIỆT TỪ GIÁO VIÊN (BẮT BUỘC THỰC HIỆN):
@@ -713,17 +761,18 @@ Các yêu cầu khác:
 - Nếu yêu cầu "tập trung vào giải pháp" → Ưu tiên phần IV với nhiều chi tiết hơn
 
 [HẾT YÊU CẦU ĐẶC BIỆT]
-` : ''}
+` : ''
+        }
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚠️ YÊU CẦU ĐỊNH DẠNG OUTPUT (BẮT BUỘC):
+⚠️ YÊU CẦU ĐỊNH DẠNG OUTPUT(BẮT BUỘC):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-1. SAU MỖI CÂU: Phải xuống dòng (Enter 2 lần).
+1. SAU MỖI CÂU: Phải xuống dòng(Enter 2 lần).
 2. SAU MỖI ĐOẠN: Cách 1 dòng trống.
-3. KHÔNG viết dính liền (wall of text).
+3. KHÔNG viết dính liền(wall of text).
 4. Sử dụng gạch đầu dòng và tiêu đề rõ ràng.
 
-${(userInfo.skknTemplate || userInfo.customTemplate) ? '' : (isHigherEd ? `
+  ${(userInfo.skknTemplate || userInfo.customTemplate) ? '' : (isHigherEd ? `
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 CẤU TRÚC SKKN BẬC CAO (TRUNG CẤP / CAO ĐẲNG / ĐẠI HỌC):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1041,7 +1090,8 @@ CẤU TRÚC SKKN CHUẨN (ÁP DỤNG KHI KHÔNG CÓ MẪU RIÊNG):
    → Giáo án minh họa
    → Hình ảnh hoạt động
    → Sản phẩm học sinh
-`)}
+`)
+        }
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 YÊU CẦU DÀN Ý(NGẮN GỌN - CHỈ ĐẦU MỤC):
@@ -1071,7 +1121,8 @@ ${getPageLimitPrompt()}
 - Nếu trung bình (25-40): Số mục con vừa phải, mỗi giải pháp 5-6 ý chính
 - Nếu nhiều trang (>40): Có thể mở rộng, mỗi giải pháp 6-8 ý chính
 - Đảm bảo dàn ý phản ánh đúng quy mô nội dung sẽ viết
-` : ''}
+` : ''
+        }
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ĐỊNH DẠNG ĐẦU RA:
@@ -1113,7 +1164,7 @@ QUAN TRỌNG:
       if (errorType === 'QUOTA_EXCEEDED' || errorType === 'RATE_LIMIT') {
         const rotation = apiKeyManager.markKeyError(apiKey, errorType);
         if (rotation.success && rotation.newKey) {
-          console.log(`🔄 Tự động xoay key: ${rotation.message}`);
+          console.log(`🔄 Tự động xoay key: ${rotation.message} `);
           setApiKey(rotation.newKey);
           localStorage.setItem('gemini_api_key', rotation.newKey);
           initializeGeminiChat(rotation.newKey, selectedModel);
@@ -1180,9 +1231,37 @@ QUAN TRỌNG:
 
     // Logic for OUTLINE step specifically handles manual edits synchronization
     if (state.step === GenerationStep.OUTLINE) {
-      // We inject the CURRENT fullDocument (which might have been edited by user) into the prompt
-      // This ensures the AI uses the user's finalized outline.
-      currentStepPrompt = `
+      if (isCustomFlow) {
+        const firstSection = validCustomSections[0];
+        currentStepPrompt = `
+BẮT ĐẦU phản hồi bằng MENU NAVIGATION trạng thái Bước 3(Viết ${firstSection.title} - Đang thực hiện).
+
+Đây là bản DÀN Ý CHÍNH THỨC mà tôi đã chốt:
+---
+  ${state.fullDocument}
+---
+
+  NHIỆM VỤ TIẾP THEO:
+Hãy bắt tay vào viết chi tiết phần đầu tiên theo cấu trúc mẫu: ** ${firstSection.title}**.
+
+⚠️ BÁM SÁT MẪU YÊU CẦU:
+Phần này trong mẫu gốc được định nghĩa là: ${firstSection.suggestedContent || "Không có hướng dẫn phụ"}
+
+${SOLUTION_MODE_PROMPT}
+
+⚠️ LƯU Ý FORMAT:
+- Viết từng câu xuống dòng riêng.
+- Tách đoạn rõ ràng.
+- Đảm bảo mạch lạc, ngôn ngữ học thuật.
+- KHÔNG viết dính chữ.
+
+  ${getPageLimitPrompt()}
+`;
+        nextStepEnum = 2; // Step 2 is the first dynamic section
+      } else {
+        // We inject the CURRENT fullDocument (which might have been edited by user) into the prompt
+        // This ensures the AI uses the user's finalized outline.
+        currentStepPrompt = `
         BẮT ĐẦU phản hồi bằng MENU NAVIGATION trạng thái Bước 3(Viết Phần I & II - Đang thực hiện).
         
         Đây là bản DÀN Ý CHÍNH THỨC mà tôi đã chốt(tôi có thể đã chỉnh sửa trực tiếp). 
@@ -1193,9 +1272,9 @@ QUAN TRỌNG:
 --- KẾT THÚC DÀN Ý CHÍNH THỨC-- -
 
   NHIỆM VỤ TIẾP THEO:
-        Hãy tiếp tục BƯỚC 3: Viết chi tiết PHẦN I(Đặt vấn đề) và PHẦN II(Cơ sở lý luận). 
+        Hãy tiếp tục BƯỚC 3: Viết chi tiết PHẦN I(Đặt vấn đề) và PHẦN II(Cơ sở lý luận).
 
-${INTRO_GUIDE}
+  ${INTRO_GUIDE}
 
 ${THEORY_GUIDE}
         
@@ -1207,19 +1286,61 @@ ${THEORY_GUIDE}
         
         Viết sâu sắc, học thuật, đúng cấu trúc đã đề ra.Lưu ý bám sát thông tin về trường và địa phương đã cung cấp.
 
-        ⚠️ NHẮC LẠI THÔNG TIN QUAN TRỌNG (BẮT BUỘC BÁM SÁT):
-        - Cấp học: ${userInfo.level}
-        - Khối lớp / Đối tượng: ${userInfo.grade}
-        - Môn học: ${userInfo.subject}
-        - Trường: ${userInfo.school}
-        - Địa phương: ${userInfo.location}
-        🚫 TUYỆT ĐỐI KHÔNG dùng thông tin của cấp học khác (THPT, THCS...) nếu đề tài là cấp ${userInfo.level}!
-        Mọi ví dụ, số liệu, thuật ngữ PHẢI phù hợp với cấp ${userInfo.level}, khối ${userInfo.grade}.
+        ⚠️ NHẮC LẠI THÔNG TIN QUAN TRỌNG(BẮT BUỘC BÁM SÁT):
+- Cấp học: ${userInfo.level}
+- Khối lớp / Đối tượng: ${userInfo.grade}
+- Môn học: ${userInfo.subject}
+- Trường: ${userInfo.school}
+- Địa phương: ${userInfo.location}
+        🚫 TUYỆT ĐỐI KHÔNG dùng thông tin của cấp học khác(THPT, THCS...) nếu đề tài là cấp ${userInfo.level} !
+  Mọi ví dụ, số liệu, thuật ngữ PHẢI phù hợp với cấp ${userInfo.level}, khối ${userInfo.grade}.
 
   ${getPageLimitPrompt()}
   ${getSectionPagePrompt('Phần I (Đặt vấn đề) + Phần II (Cơ sở lý luận)', 'partI_II')} `;
 
-      nextStepEnum = GenerationStep.PART_I_II;
+        nextStepEnum = GenerationStep.PART_I_II;
+      }
+    } else if (isCustomFlow && state.step >= 2) {
+      const sectionIdx = state.step - 2;
+      const appendixStep = 2 + validCustomSections.length;
+
+      if (sectionIdx < validCustomSections.length - 1) {
+        // Có phần tiếp theo
+        const nextSection = validCustomSections[sectionIdx + 1];
+        currentStepPrompt = `
+BẮT ĐẦU phản hồi bằng MENU NAVIGATION trạng thái Bước ${state.step + 2} (Viết ${nextSection.title} - Đang thực hiện).
+
+Tiếp tục viết chi tiết nội dung phần tiếp theo của SKKN: ** ${nextSection.title}**.
+
+(Hướng dẫn từ mẫu gốc: ${nextSection.suggestedContent || "Không có hướng dẫn phụ"})
+
+${SOLUTION_MODE_PROMPT}
+
+${NATURAL_WRITING_TECHNIQUES}
+
+⚠️ LƯU Ý FORMAT:
+- Viết từng câu xuống dòng riêng.
+- Tách đoạn rõ ràng.
+- Liên kết logic với phần trước đó.
+- KHÔNG viết dính chữ.
+
+  ${getPageLimitPrompt()}
+`;
+        nextStepEnum = state.step + 1;
+      } else if (sectionIdx === validCustomSections.length - 1) {
+        // Xong section cuối -> Sang Completed
+        currentStepPrompt = `
+✅ SKKN ĐÃ HOÀN THÀNH!
+
+Bạn đã viết xong toàn bộ nội dung chính của SKKN theo đúng cấu trúc mẫu.
+
+📌 BÂY GIỜ BẠN CÓ THỂ:
+1. Xuất file Word để chỉnh sửa chi tiết
+2. Tạo PHỤ LỤC chi tiết bằng nút "TẠO PHỤ LỤC"
+  `;
+        nextStepEnum = appendixStep + 1; // Completed step
+        shouldAppend = false;
+      }
     } else {
       // Standard flow for other steps
       const nextStepMap: Record<number, { prompt: string, nextStep: GenerationStep, skipAppend?: boolean }> = {
@@ -1227,7 +1348,7 @@ ${THEORY_GUIDE}
           prompt: `
               BẮT ĐẦU phản hồi bằng MENU NAVIGATION trạng thái Bước 4(Viết Phần III - Đang thực hiện).
 
-${REALITY_GUIDE}
+  ${REALITY_GUIDE}
 
               Tiếp tục BƯỚC 3(tiếp): Viết chi tiết PHẦN III(Thực trạng vấn đề). 
               Nhớ tạo bảng số liệu khảo sát giả định logic phù hợp với đối tượng nghiên cứu là: ${userInfo.researchSubjects || "Học sinh"}.
@@ -1448,7 +1569,7 @@ SGK: ${userInfo.textbook}
           prompt: `
               BẮT ĐẦU phản hồi bằng MENU NAVIGATION trạng thái(Kết luận & Khuyến nghị - Đang thực hiện).
 
-${RESULT_GUIDE}
+  ${RESULT_GUIDE}
 
 ${CONCLUSION_GUIDE}
 
@@ -1524,7 +1645,7 @@ ${CONCLUSION_GUIDE}
       if (errorType === 'QUOTA_EXCEEDED' || errorType === 'RATE_LIMIT') {
         const rotation = apiKeyManager.markKeyError(apiKey, errorType);
         if (rotation.success && rotation.newKey) {
-          console.log(`🔄 Tự động xoay key: ${rotation.message}`);
+          console.log(`🔄 Tự động xoay key: ${rotation.message} `);
           setApiKey(rotation.newKey);
           localStorage.setItem('gemini_api_key', rotation.newKey);
           initializeGeminiChat(rotation.newKey, selectedModel);
@@ -2075,14 +2196,18 @@ Tổ: [Tổ chuyên môn]
 
         {/* Progress Stepper */}
         <div className="space-y-6">
-          {Object.entries(STEPS_INFO).map(([key, info]) => {
+          {Object.entries(currentStepsInfo).map(([key, info]) => {
             const stepNum = parseInt(key);
 
-            // Luôn ẩn step Phụ lục (15) và Hoàn tất (16)
-            if (stepNum > 14) return null;
-
-            // Ẩn step Giải pháp 4,5 và Review GP4/5 (step 10-13) và Phần V-VI (step 14) nếu không chọn
-            if (stepNum >= 10 && stepNum <= 14 && !userInfo.includeSolution4_5) return null;
+            if (isCustomFlow) {
+              const appendixStep = 2 + validCustomSections.length;
+              if (stepNum >= appendixStep) return null; // Ẩn Phụ lục và Hoàn tất trên sidebar
+            } else {
+              // Luôn ẩn step Phụ lục (15) và Hoàn tất (16)
+              if (stepNum > 14) return null;
+              // Ẩn step Giải pháp 4,5 và Review GP4/5 (step 10-13) và Phần V-VI (step 14) nếu không chọn
+              if (stepNum >= 10 && stepNum <= 14 && !userInfo.includeSolution4_5) return null;
+            }
 
             let statusColor = "text-gray-400 border-gray-200";
             let icon = <div className="w-2 h-2 rounded-full bg-gray-300" />;
@@ -2393,7 +2518,7 @@ Tổ: [Tổ chuyên môn]
           <div className="flex justify-between items-center">
             <h1 className="font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-sky-500 text-xl" style={{ fontFamily: 'Nunito, sans-serif' }}>SKKN PRO</h1>
             <span className="text-xs bg-blue-100 text-blue-700 px-3 py-1 rounded-full font-medium">
-              {STEPS_INFO[state.step < 9 ? state.step : 8].label}
+              {currentStepsInfo[state.step < COMPLETED_STEP_ID ? state.step : COMPLETED_STEP_ID - 1]?.label || "SKKN PRO"}
             </span>
           </div>
           <p className="text-xs text-blue-700 font-medium">✨ Trợ lý viết SKKN thông minh</p>
@@ -2473,7 +2598,7 @@ Tổ: [Tổ chuyên môn]
                         keyToUse = rotation.newKey;
                         setApiKey(keyToUse);
                         localStorage.setItem('gemini_api_key', keyToUse);
-                        console.log(`🔑 Đã xoay sang key mới: ${rotation.message}`);
+                        console.log(`🔑 Đã xoay sang key mới: ${rotation.message} `);
                       } else {
                         // Nếu không có key khác, reset tất cả key và thử lại
                         apiKeyManager.resetAllKeys();
@@ -2541,7 +2666,7 @@ Tổ: [Tổ chuyên môn]
 
             {/* Mobile Controls Floating */}
             <div className="lg:hidden absolute bottom-4 left-4 right-4 flex gap-2 shadow-lg">
-              {!state.isStreaming && state.step < GenerationStep.COMPLETED && (
+              {!state.isStreaming && state.step < COMPLETED_STEP_ID && (
                 <Button onClick={generateNextSection} className="flex-1 shadow-xl">
                   {state.step === GenerationStep.OUTLINE ? 'Chốt & Tiếp tục' : 'Viết tiếp'}
                 </Button>
