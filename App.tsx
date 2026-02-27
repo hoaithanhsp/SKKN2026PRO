@@ -1348,11 +1348,29 @@ ${THEORY_GUIDE}
         currentStepPrompt = `
 BẮT ĐẦU phản hồi bằng MENU NAVIGATION trạng thái Bước ${state.step + 2} (Viết ${nextSection.title} - Đang thực hiện).
 
-Tiếp tục viết chi tiết nội dung phần tiếp theo của SKKN: ** ${nextSection.title}**.
+╔═══════════════════════════════════════════════════════════╗
+║  THÔNG TIN ĐỀ TÀI (BẮT BUỘC BÁM SÁT)                 ║
+╚═══════════════════════════════════════════════════════════╝
+Đề tài: "${userInfo.topic}"
+Môn: ${userInfo.subject} - Lớp: ${userInfo.grade} - Cấp: ${userInfo.level}
+Trường: ${userInfo.school}, ${userInfo.location}
+SGK: ${userInfo.textbook}
+CSVC: ${userInfo.facilities}
+
+Tiếp tục viết chi tiết nội dung phần tiếp theo của SKKN: **${nextSection.title}**.
 
 (Hướng dẫn từ mẫu gốc: ${nextSection.suggestedContent || "Không có hướng dẫn phụ"})
 
 ${SOLUTION_MODE_PROMPT}
+
+⚠️ SỐ LƯỢNG GIẢI PHÁP ĐÃ CHỌN: ${userInfo.numSolutions || 3} GIẢI PHÁP
+Nếu phần này liên quan đến mô tả giải pháp/biện pháp, BẮT BUỘC phải viết ĐỦ ${userInfo.numSolutions || 3} giải pháp.
+Mỗi giải pháp phải có NỘI DUNG VÀ QUY TRÌNH chi tiết, VÍ DỤ MINH HỌA cụ thể.
+
+${state.fullDocument ? `DÀN Ý ĐÃ DUYỆT (BẮT BUỘC BÁM SÁT):
+${state.fullDocument.substring(0, 2000)}
+
+⚠️ Tên giải pháp, cấu trúc PHẢI TRÙNG KHỚP với dàn ý trên.` : ''}
 
 ${NATURAL_WRITING_TECHNIQUES}
 

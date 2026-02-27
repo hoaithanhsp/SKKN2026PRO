@@ -17,6 +17,9 @@ import {
   WidthType,
   LevelFormat,
   ShadingType,
+  PageNumber,
+  Footer,
+  Header,
 } from 'docx';
 
 interface ParsedElement {
@@ -34,23 +37,29 @@ interface ParsedElement {
 function parseInlineFormatting(text: string): TextRun[] {
   const runs: TextRun[] = [];
 
-  // Regex để tìm bold (**text** hoặc __text__) và italic (*text* hoặc _text_)
-  const regex = /(\*\*|__)(.*?)\1|(\*|_)(.*?)\3|`([^`]+)`|([^*_`]+)/g;
+  // Regex để tìm LaTeX ($$...$$ block, $...$ inline), bold, italic, code
+  const regex = /(\$\$)([^$]+?)\1|(\$)([^$]+?)\3|(\*\*|__)(.*?)\5|(\*|_)(.*?)\7|`([^`]+)`|([^*_$`]+)/g;
   let match;
 
   while ((match = regex.exec(text)) !== null) {
     if (match[2]) {
-      // Bold text
-      runs.push(new TextRun({ text: match[2], bold: true }));
+      // LaTeX block ($$...$$) → Cambria Math font
+      runs.push(new TextRun({ text: match[2].trim(), font: 'Cambria Math', italics: true, size: 26 }));
     } else if (match[4]) {
-      // Italic text
-      runs.push(new TextRun({ text: match[4], italics: true }));
-    } else if (match[5]) {
-      // Code inline
-      runs.push(new TextRun({ text: match[5], font: 'Consolas', shading: { fill: 'E8E8E8' } }));
+      // LaTeX inline ($...$) → Cambria Math font
+      runs.push(new TextRun({ text: match[4].trim(), font: 'Cambria Math', italics: true, size: 26 }));
     } else if (match[6]) {
+      // Bold text
+      runs.push(new TextRun({ text: match[6], bold: true }));
+    } else if (match[8]) {
+      // Italic text
+      runs.push(new TextRun({ text: match[8], italics: true }));
+    } else if (match[9]) {
+      // Code inline
+      runs.push(new TextRun({ text: match[9], font: 'Consolas', shading: { fill: 'E8E8E8' } }));
+    } else if (match[10]) {
       // Normal text
-      runs.push(new TextRun({ text: match[6] }));
+      runs.push(new TextRun({ text: match[10] }));
     }
   }
 
@@ -352,7 +361,10 @@ export async function exportMarkdownToDocx(
     styles: {
       default: {
         document: {
-          run: { font: 'Times New Roman', size: 28 } // 14pt
+          run: { font: 'Times New Roman', size: 26 }, // 13pt chuẩn SKKN VN
+          paragraph: {
+            spacing: { line: 360 } // Line spacing 1.5
+          }
         }
       },
       paragraphStyles: [
@@ -362,8 +374,8 @@ export async function exportMarkdownToDocx(
           basedOn: 'Normal',
           next: 'Normal',
           quickFormat: true,
-          run: { size: 32, bold: true, font: 'Times New Roman' },
-          paragraph: { spacing: { before: 240, after: 120 } }
+          run: { size: 28, bold: true, font: 'Times New Roman', allCaps: true }, // 14pt bold UPPERCASE
+          paragraph: { spacing: { before: 360, after: 120 } }
         },
         {
           id: 'Heading2',
@@ -371,8 +383,8 @@ export async function exportMarkdownToDocx(
           basedOn: 'Normal',
           next: 'Normal',
           quickFormat: true,
-          run: { size: 28, bold: true, font: 'Times New Roman' },
-          paragraph: { spacing: { before: 200, after: 100 } }
+          run: { size: 26, bold: true, font: 'Times New Roman' }, // 13pt bold
+          paragraph: { spacing: { before: 240, after: 100 } }
         },
         {
           id: 'Heading3',
@@ -380,8 +392,8 @@ export async function exportMarkdownToDocx(
           basedOn: 'Normal',
           next: 'Normal',
           quickFormat: true,
-          run: { size: 26, bold: true, font: 'Times New Roman' },
-          paragraph: { spacing: { before: 160, after: 80 } }
+          run: { size: 26, bold: true, italics: true, font: 'Times New Roman' }, // 13pt bold italic
+          paragraph: { spacing: { before: 200, after: 80 } }
         }
       ]
     },
@@ -391,8 +403,25 @@ export async function exportMarkdownToDocx(
     sections: [{
       properties: {
         page: {
-          margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } // 1 inch margins
+          margin: {
+            top: 1134,   // 2cm (1134 twips)
+            right: 1134, // 2cm
+            bottom: 1134, // 2cm
+            left: 1701   // 3cm (1701 twips) - chuẩn SKKN VN
+          }
         }
+      },
+      footers: {
+        default: new Footer({
+          children: [
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              children: [
+                new TextRun({ children: [PageNumber.CURRENT], font: 'Times New Roman', size: 22 })
+              ]
+            })
+          ]
+        })
       },
       children: [...headerParagraphs, ...children]
     }]

@@ -309,6 +309,17 @@ export const NATURAL_WRITING_TECHNIQUES = `
 🖊️ KỸ THUẬT VIẾT GIỌNG VĂN TỰ NHIÊN (KHÔNG MÁY MÓC)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+🚫 DANH SÁCH CỤM TỪ AI PHẢI TRÁNH (BLACKLIST):
+- "tóm lại", "nhìn chung", "có thể thấy rằng", "đáng chú ý là"
+- "điều quan trọng cần nhấn mạnh", "cần lưu ý rằng", "không thể phủ nhận"
+- "trong bối cảnh hiện nay", "xu thế tất yếu", "đòi hỏi cấp thiết"
+- "đáp ứng yêu cầu", "nâng cao chất lượng", "góp phần quan trọng"
+- "hết sức cần thiết", "vô cùng quan trọng", "mang tính đột phá"
+- "là nền tảng vững chắc", "mang lại hiệu quả tích cực", "là giải pháp tối ưu"
+- "với mục tiêu hướng đến", "trên tinh thần", "theo hướng đổi mới"
+- "thúc đẩy sự phát triển toàn diện", "khẳng định vai trò"
+→ Thay bằng: Diễn đạt cụ thể, trực tiếp, có số liệu. VD: "31/45 em đã tự hoàn thành bài tập" thay vì "mang lại hiệu quả tích cực"
+
 **ĐẶC ĐIỂM VĂN AI THƯỜNG MẮC (PHẢI TRÁNH):**
 - Câu văn quá hoàn hảo, đều đều → Xen kẽ câu dài ngắn
 - Dùng từ hoa mỹ quá mức → Từ ngữ giản dị, thực tế
@@ -316,6 +327,21 @@ export const NATURAL_WRITING_TECHNIQUES = `
 - Thiếu ví dụ cụ thể từ thực tế → Đưa tình huống thật
 - Cấu trúc đoạn văn quá đối xứng → Đa dạng cách trình bày
 - Cùng từ chuyển tiếp lặp lại → Đa dạng hóa từ nối
+
+**KỸ THUẬT "SHOW, DON'T TELL" (QUAN TRỌNG):**
+❌ TELL (kể): "Phương pháp này rất hiệu quả trong việc phát triển tư duy."
+✅ SHOW (thể hiện): "Sau 3 tuần áp dụng, em Minh — vốn thường xuyên ngồi im trong giờ học — đã chủ động giơ tay phát biểu 4 lần trong tiết 35. Em còn đặt câu hỏi phản biện khiến cả lớp bất ngờ."
+
+❌ TELL: "Giải pháp giúp học sinh hứng thú hơn."
+✅ SHOW: "Khi tôi chiếu slide đầu tiên của dự án, lớp vốn ồn ào bỗng im lặng. Phương — em hay ngủ gật — ngồi thẳng lưng, mắt sáng lên hỏi: 'Cô ơi, chúng em thật sự được làm cái này ạ?'"
+
+**KỸ THUẬT "SPECIFICITY" (CỤ THỂ HÓA):**
+| Cách viết MỜ (AI) | Cách viết CỤ THỂ (tự nhiên) |
+|---|---|
+| Cải thiện đáng kể | Tỷ lệ HS đạt khá-giỏi tăng từ 41,2% lên 67,8% |
+| Nhiều học sinh tiến bộ | 28/42 em cải thiện ít nhất 1 mức xếp loại |
+| Áp dụng thành công | Triển khai tại 3 lớp (10A2, 10A5, 10A7) trong HK2 |
+| Được đồng nghiệp đánh giá cao | Cô Hương (tổ phó) nhận xét: "Cách tổ chức nhóm rất khác so với trước" |
 
 **KỸ THUẬT TẠO GIỌNG VĂN TỰ NHIÊN:**
 
@@ -329,6 +355,8 @@ export const NATURAL_WRITING_TECHNIQUES = `
 
 5) Đa dạng từ nối: Thay "Ngoài ra" → Bên cạnh đó / Không chỉ vậy / Hơn nữa / Đồng thời / Song song với đó
    Thay "Tuy nhiên" → Mặt khác / Dù vậy / Thế nhưng / Trái lại / Mặc dù vậy
+
+6) Micro-story: Kể 1 câu chuyện ngắn (2-3 câu) thực tế trong lớp học trước khi phân tích
 
 **VÍ DỤ SO SÁNH:**
 ❌ VĂN AI: "Phương pháp dạy học tích cực là phương pháp giáo dục hiện đại, lấy HS làm trung tâm, giúp phát triển năng lực tự học, sáng tạo và tư duy phản biện."
