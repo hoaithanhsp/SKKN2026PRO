@@ -10,7 +10,6 @@ import { TemplateUploadStep } from './components/TemplateUploadStep';
 import { DocumentPreview } from './components/DocumentPreview';
 import { Button } from './components/Button';
 import { ApiKeyModal } from './components/ApiKeyModal';
-import { SolutionReviewModal } from './components/SolutionReviewModal';
 import { Download, ChevronRight, Wand2, FileText, CheckCircle, RefreshCw, Settings, AlertTriangle, Save, Trash2 } from 'lucide-react';
 
 import { LockScreen } from './components/LockScreen';
@@ -1937,9 +1936,20 @@ ${CONCLUSION_GUIDE}
         solutionContent = `⚠️ Không tìm thấy nội dung chi tiết của GIẢI PHÁP ${solutionNum}.\n\nVui lòng kiểm tra lại hoặc yêu cầu AI viết lại giải pháp này.`;
       }
 
-      setCurrentSolutionContent(solutionContent);
-      setCurrentSolutionNumber(solutionNum);
-      setShowSolutionReview(true);
+      // Khóa Modal Xem và Sửa giải pháp - Tự động duyệt và chuyển tiếp
+      setSolutionsState(prev => ({
+        ...prev,
+        [`solution${solutionNum}`]: {
+          content: solutionContent,
+          isApproved: true,
+          revisionHistory: [],
+        },
+      }));
+
+      // Chuyển sang bước tiếp theo
+      setTimeout(() => {
+        generateNextSection();
+      }, 100);
     }
   }, [state.step, state.isStreaming, state.fullDocument]);
 
@@ -2427,18 +2437,7 @@ Tổ: [Tổ chuyên môn]
         isDismissible={!!apiKey}
       />
 
-      {/* Solution Review Modal */}
-      <SolutionReviewModal
-        isOpen={showSolutionReview}
-        solutionNumber={currentSolutionNumber}
-        solutionContent={currentSolutionContent}
-        isLoading={state.isStreaming}
-        isRevising={isRevisingSolution}
-        onClose={() => setShowSolutionReview(false)}
-        onApprove={handleApproveSolution}
-        onRevise={handleReviseSolution}
-        onDownloadWord={exportSolutionToWord}
-      />
+
 
       {/* Session Restore Modal */}
       {showRestoreModal && pendingSessionData && (
@@ -2516,7 +2515,9 @@ Tổ: [Tổ chuyên môn]
         {/* Mobile Header */}
         <div className="lg:hidden mb-4 bg-gradient-to-r from-white to-sky-50 p-4 rounded-xl shadow-lg border border-sky-100 flex flex-col gap-2">
           <div className="flex justify-between items-center">
-            <h1 className="font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-sky-500 text-xl" style={{ fontFamily: 'Nunito, sans-serif' }}>SKKN PRO</h1>
+            <span className="ml-3 font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600 text-xl tracking-tight" style={{ fontFamily: 'Nunito, sans-serif' }}>
+              SKKN 2026 PRO
+            </span>
             <span className="text-xs bg-blue-100 text-blue-700 px-3 py-1 rounded-full font-medium">
               {currentStepsInfo[state.step < COMPLETED_STEP_ID ? state.step : COMPLETED_STEP_ID - 1]?.label || "SKKN PRO"}
             </span>

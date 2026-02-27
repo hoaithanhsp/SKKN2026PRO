@@ -204,7 +204,7 @@ export const TemplateUploadStep: React.FC<Props> = ({
                         <Sparkles className="w-8 h-8 text-white" />
                     </div>
                     <h1 className="text-3xl font-extrabold text-gray-900 mb-2" style={{ fontFamily: 'Nunito, sans-serif' }}>
-                        SKKN PRO
+                        SKKN 2026 PRO
                     </h1>
                     <p className="text-gray-500 text-sm">Trợ lý viết Sáng kiến Kinh nghiệm thông minh</p>
                 </div>
@@ -344,10 +344,10 @@ export const TemplateUploadStep: React.FC<Props> = ({
                                                         key={idx}
                                                         style={{ paddingLeft: `${(s.level - 1) * 16}px` }}
                                                         className={`text-sm py-0.5 ${s.level === 1
-                                                                ? 'font-bold text-gray-800'
-                                                                : s.level === 2
-                                                                    ? 'text-gray-700'
-                                                                    : 'text-gray-500 text-xs'
+                                                            ? 'font-bold text-gray-800'
+                                                            : s.level === 2
+                                                                ? 'text-gray-700'
+                                                                : 'text-gray-500 text-xs'
                                                             }`}
                                                     >
                                                         <span className="mr-1.5">
@@ -417,7 +417,7 @@ export const TemplateUploadStep: React.FC<Props> = ({
 
                 {/* Footer text */}
                 <p className="text-center text-xs text-gray-400 mt-6">
-                    SKKN PRO • Trợ lý viết Sáng kiến Kinh nghiệm bằng AI
+                    SKKN 2026 PRO • Trợ lý viết Sáng kiến Kinh nghiệm bằng AI
                 </p>
             </div>
         </div>
