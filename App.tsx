@@ -223,31 +223,37 @@ const App: React.FC = () => {
   }, [userInfo.customTemplate]);
 
   const validCustomSections = useMemo(() => {
-    // Chiến lược gom nhóm (chunking):
-    // - Lấy mục Level 1 nếu nó KHÔNG có mục Level 2 nào làm con (nó là mục độc lập).
-    // - Lấy các mục Level 2 (bỏ qua Level 3+ vì sẽ được gán chung vào yêu cầu của Level 2 để AI viết).
+    if (!customTemplateData || !customTemplateData.sections) return [];
+
+    // Thuật toán gộp mục an toàn tối đa: 
+    // - Lấy mục Level 1 NẾU nó KHÔNG có mục con (thuộc mọi level cao hơn nó).
+    // - Lấy mục Level >= 2, nhưng sẽ BỎ QUA TẤT CẢ mục con bên trong nó (để tránh băm quá nát như tiểu mục a,b,c).
+    // Thuật toán này sẽ chạy đúng ngay cả khi AI đánh nhầm Level của II.1 thành Level 3 thay vì Level 2.
     const result = [];
     const sections = customTemplateData.sections;
 
     for (let i = 0; i < sections.length; i++) {
       const current = sections[i];
 
-      if (current.level === 1) {
-        let hasLevel2Child = false;
-        // Kiểm tra xem dưới level 1 này có level 2 nào không, trước khi nhảy sang level 1 khác
-        for (let j = i + 1; j < sections.length; j++) {
-          if (sections[j].level === 1) break;
-          if (sections[j].level === 2) {
-            hasLevel2Child = true;
-            break;
-          }
-        }
+      let hasChild = false;
+      if (i + 1 < sections.length && sections[i + 1].level > current.level) {
+        hasChild = true;
+      }
 
-        if (!hasLevel2Child) {
+      if (current.level === 1) {
+        if (!hasChild) {
           result.push(current);
         }
-      } else if (current.level === 2) {
+      } else {
+        // Push mục hiện tại (>= 2)
         result.push(current);
+
+        // Bỏ qua tất cả các mục con của nó
+        let nextIdx = i + 1;
+        while (nextIdx < sections.length && sections[nextIdx].level > current.level) {
+          nextIdx++;
+        }
+        i = nextIdx - 1; // Sẽ được i++ bởi vòng lặp for
       }
     }
 
@@ -2224,7 +2230,7 @@ Tổ: [Tổ chuyên môn]
         <div className="mb-8">
           <h1 className="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-sky-500 flex items-center gap-2" style={{ fontFamily: 'Nunito, sans-serif' }}>
             <Wand2 className="h-6 w-6 text-blue-500" />
-            SKKN PRO
+            SKKN 2026 PRO
           </h1>
           <p className="text-xs text-blue-800 font-medium mt-1.5 tracking-wide">✨ Trợ lý viết SKKN thông minh</p>
         </div>
@@ -2544,7 +2550,7 @@ Tổ: [Tổ chuyên môn]
               SKKN 2026 PRO
             </span>
             <span className="text-xs bg-blue-100 text-blue-700 px-3 py-1 rounded-full font-medium">
-              {currentStepsInfo[state.step < COMPLETED_STEP_ID ? state.step : COMPLETED_STEP_ID - 1]?.label || "SKKN PRO"}
+              {currentStepsInfo[state.step < COMPLETED_STEP_ID ? state.step : COMPLETED_STEP_ID - 1]?.label || "SKKN 2026 PRO"}
             </span>
           </div>
           <p className="text-xs text-blue-700 font-medium">✨ Trợ lý viết SKKN thông minh</p>
