@@ -11,6 +11,9 @@ export interface SKKNTemplate {
   name: string;         // Tên mẫu (từ tên file hoặc tiêu đề)
   sections: SKKNSection[]; // Danh sách các mục
   rawContent: string;   // Nội dung gốc đã trích xuất
+  contentGuidelines?: string; // Hướng dẫn nội dung viết từ mẫu
+  pageLimitFromTemplate?: number; // Số trang giới hạn nếu mẫu ghi rõ
+  headerFields?: Record<string, string>; // Thông tin hành chính (Họ tên, Đơn vị...)
 }
 
 // Wizard steps cho flow Template-First
@@ -61,7 +64,7 @@ export interface UserInfo {
   requirementsConfirmed: boolean; // Đã xác nhận các yêu cầu chưa
 
   // Tùy chọn số lượng giải pháp
-  includeSolution4_5: boolean; // Có viết giải pháp 4 và 5 hay không (mặc định false = chỉ 3 giải pháp)
+  numSolutions: number; // Số giải pháp cần viết (1-5, mặc định 3)
 }
 
 export enum GenerationStep {

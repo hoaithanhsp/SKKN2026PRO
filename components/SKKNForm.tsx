@@ -816,22 +816,25 @@ export const SKKNForm: React.FC<Props> = ({ userInfo, onChange, onSubmit, onManu
             </span>
           </h3>
 
-          {/* Checkbox viết thêm Giải pháp 4-5 */}
+          {/* Dropdown chọn số giải pháp */}
           <div className="flex items-center gap-3 mb-4 p-4 bg-gradient-to-r from-amber-50 to-orange-50 rounded-lg border border-amber-200">
-            <input
-              type="checkbox"
-              id="includeSolution4_5"
-              name="includeSolution4_5"
-              checked={userInfo.includeSolution4_5 || false}
-              onChange={(e) => onChange('includeSolution4_5', e.target.checked as any)}
-              className="w-5 h-5 text-amber-600 border-gray-300 rounded focus:ring-amber-500 cursor-pointer"
-            />
-            <label htmlFor="includeSolution4_5" className="text-sm font-medium text-gray-700 cursor-pointer select-none">
-              ✨ Viết thêm <strong className="text-amber-700">Giải pháp 4 và 5</strong>
-              <span className="block text-xs text-gray-500 font-normal mt-0.5">
-                (Mặc định chỉ viết 3 giải pháp. Tick nếu muốn viết 5 giải pháp)
-              </span>
+            <label htmlFor="numSolutions" className="text-sm font-medium text-gray-700 select-none flex items-center gap-2">
+              ✨ Số lượng <strong className="text-amber-700">giải pháp</strong> cần viết:
             </label>
+            <select
+              id="numSolutions"
+              name="numSolutions"
+              value={userInfo.numSolutions || 3}
+              onChange={(e) => onChange('numSolutions', parseInt(e.target.value) as any)}
+              className="w-20 p-2 border border-amber-300 rounded-lg text-sm font-bold text-amber-800 bg-white focus:ring-amber-500 focus:border-amber-500 cursor-pointer text-center"
+            >
+              <option value={1}>1</option>
+              <option value={2}>2</option>
+              <option value={3}>3</option>
+              <option value={4}>4</option>
+              <option value={5}>5</option>
+            </select>
+            <span className="text-xs text-gray-500">(Mặc định: 3 giải pháp)</span>
           </div>
 
           {/* Các tùy chọn yêu cầu chi tiết */}

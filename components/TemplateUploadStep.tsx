@@ -110,12 +110,15 @@ export const TemplateUploadStep: React.FC<Props> = ({
             // Dùng AI trích xuất cấu trúc
             if (apiKey) {
                 try {
-                    const sections = await extractSKKNStructure(apiKey, extractedText, selectedModel);
-                    if (sections.length > 0) {
+                    const result = await extractSKKNStructure(apiKey, extractedText, selectedModel);
+                    if (result.sections.length > 0) {
                         const template: SKKNTemplate = {
                             name: file.name,
-                            sections,
+                            sections: result.sections,
                             rawContent: extractedText,
+                            contentGuidelines: result.contentGuidelines || '',
+                            pageLimitFromTemplate: result.pageLimitFromTemplate || 0,
+                            headerFields: result.headerFields || {},
                         };
                         setParsedTemplate(template);
                         setProgress('');

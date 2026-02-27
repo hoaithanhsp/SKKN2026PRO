@@ -328,7 +328,7 @@ export const extractSKKNStructure = async (
   apiKey: string,
   templateContent: string,
   selectedModel?: string
-): Promise<SKKNSection[]> => {
+): Promise<{ sections: SKKNSection[], contentGuidelines?: string, pageLimitFromTemplate?: number, headerFields?: Record<string, string> }> => {
   const ai = new GoogleGenAI({ apiKey });
 
   // Giới hạn nội dung để tránh vượt token limit
@@ -336,7 +336,7 @@ export const extractSKKNStructure = async (
 
   const prompt = `Bạn là chuyên gia phân tích cấu trúc tài liệu SKKN (Sáng kiến Kinh nghiệm).
 
-NHIỆM VỤ: Phân tích MẪU YÊU CẦU SKKN sau và TRÍCH XUẤT CHÍNH XÁC cấu trúc các mục/phần cốt lõi cần viết.
+NHIỆM VỤ: Phân tích MẪU YÊU CẦU SKKN sau và TRÍCH XUẤT ĐẦY ĐỦ thông tin.
 
 ═══════════════════════════════════════════════════════════════
 MẪU SKKN CẦN PHÂN TÍCH:
@@ -344,24 +344,50 @@ MẪU SKKN CẦN PHÂN TÍCH:
 ${truncatedContent}
 ═══════════════════════════════════════════════════════════════
 
-TRẢ VỀ JSON ARRAY với format CHÍNH XÁC sau (KHÔNG có text khác, CHỈ JSON):
+TRẢ VỀ JSON OBJECT với format CHÍNH XÁC sau (KHÔNG có text khác, CHỈ JSON):
 
-[
-  {"id": "1", "level": 1, "title": "PHẦN I: ĐẶT VẤN ĐỀ", "suggestedContent": "Nêu rõ lý do, bối cảnh chọn đề tài..."},
-  {"id": "1.1", "level": 2, "title": "1. Lý do chọn đề tài", "suggestedContent": "Trình bày sự cần thiết của giải pháp tại đơn vị"},
-  {"id": "2", "level": 1, "title": "PHẦN II: NỘI DUNG SÁNG KIẾN", "suggestedContent": ""},
-  ...
-]
+{
+  "sections": [
+    {"id": "1", "level": 1, "title": "I. Mô tả giải pháp đã biết", "suggestedContent": "Nêu rõ giải pháp/cách làm cũ đang được áp dụng..."},
+    {"id": "2", "level": 1, "title": "II. Nội dung giải pháp đề nghị công nhận sáng kiến", "suggestedContent": ""},
+    {"id": "2.1", "level": 2, "title": "II.1 Nội dung giải pháp đề nghị công nhận sáng kiến", "suggestedContent": "Trình bày chi tiết nội dung giải pháp mới"},
+    ...
+  ],
+  "contentGuidelines": "Tóm tắt ngắn gọn các hướng dẫn viết nội dung nếu mẫu có ghi (VD: yêu cầu mô tả giải pháp cũ, nêu tính mới, so sánh trước sau...)",
+  "pageLimitFromTemplate": 0,
+  "headerFields": {
+    "hoTen": "Họ và tên",
+    "chucVu": "Chức vụ, đơn vị công tác",
+    "tenSangKien": "Tên sáng kiến",
+    "linhVuc": "Lĩnh vực áp dụng sáng kiến",
+    "donViApDung": "Đơn vị áp dụng sáng kiến",
+    "thoiGian": "Thời gian áp dụng"
+  }
+}
 
 QUY TẮC QUAN TRỌNG TỐI CAO:
-1. BỎ QUA HOÀN TOÀN CÁC THÔNG TIN HÀNH CHÍNH, FORM ĐIỀN THÔNG TIN CÁ NHÂN (Họ và tên, Chức vụ, Đơn vị, Ngày sinh, Điện thoại, Lĩnh vực áp dụng, Tác giả, Đồng tác giả...). Hệ thống đã có form thu thập riêng!
-2. CHỈ TRÍCH XUẤT cấu trúc phần NỘI DUNG CỐT LÕI của bản báo cáo SKKN (ví dụ: Mô tả giải pháp đã biết, Nội dung giải pháp đề nghị, Tính mới, Hiệu quả, Khả năng nhân rộng, Kết luận, Kiến nghị...).
-3. level 1: Phần lớn nhất (PHẦN I, PHẦN II, CHƯƠNG 1, MỤC I lớn...) - Tập trung tạo Level 1 cho các nhóm nội dung mô tả giải pháp.
-4. level 2: Mục con cấp 1 (1., 2., 3....)
-5. level 3: Mục con cấp 2 (a., b., c....)
-6. Giữ NGUYÊN tiêu đề gốc trong mẫu.
-7. Trường \`suggestedContent\`: Nếu mẫu có giải thích/gợi ý cách viết cho mục đó, hãy tóm tắt ngắn gọn vào trường này để AI dựa vào đó sinh văn bản.
-8. CHỈ TRẢ VỀ JSON ARRAY, KHÔNG giải thích, KHÔNG markdown code block.
+
+📋 PHẦN sections:
+1. BỎ QUA CÁC THÔNG TIN HÀNH CHÍNH trong sections (Họ tên, Chức vụ, Đơn vị...) - đưa chúng vào headerFields.
+2. CHỈ TRÍCH XUẤT cấu trúc phần NỘI DUNG CỐT LÕI cần viết (Mô tả giải pháp, Nội dung giải pháp, Tính mới, Hiệu quả, Khả năng nhân rộng...)
+3. level 1: Phần lớn nhất. level 2: Mục con cấp 1. level 3: Mục con cấp 2.
+4. Giữ NGUYÊN tiêu đề gốc trong mẫu.
+5. suggestedContent: Tóm tắt hướng dẫn viết nếu mẫu có ghi cho mục đó.
+
+📄 PHẦN contentGuidelines:
+- Tóm tắt toàn bộ hướng dẫn/yêu cầu viết mà mẫu đề cập (nếu có).
+- VD: "Mẫu yêu cầu mô tả giải pháp cũ trước, sau đó nêu giải pháp mới, so sánh tính mới, nêu hiệu quả..."
+
+📏 PHẦN pageLimitFromTemplate:
+- Nếu mẫu có ghi rõ giới hạn số trang (VD: "không quá 15 trang", "từ 10-20 trang"), trả về số trang tối đa.
+- Nếu không ghi, trả về 0.
+
+👤 PHẦN headerFields:
+- Trích xuất TÊN các trường thông tin hành chính mà mẫu yêu cầu điền (Họ tên, Chức vụ, Đơn vị, Lĩnh vực...).
+- Key: tên viết tắt camelCase. Value: tên đầy đủ tiếng Việt như mẫu ghi.
+- CHỈ lấy các trường mà MẪU thực sự có, KHÔNG tự bịa thêm.
+
+CHỈ TRẢ VỀ JSON OBJECT, KHÔNG giải thích, KHÔNG markdown code block.
 
 BẮT ĐẦU JSON NGAY:`;
 
@@ -373,10 +399,9 @@ BẮT ĐẦU JSON NGAY:`;
       contents: prompt
     });
 
-    const responseText = response.text || '[]';
+    const responseText = response.text || '{}';
 
     // Cố gắng parse JSON từ response
-    // Xử lý trường hợp AI trả về có markdown code block
     let jsonText = responseText.trim();
 
     // Remove markdown code blocks if present
@@ -386,21 +411,40 @@ BẮT ĐẦU JSON NGAY:`;
       jsonText = jsonText.replace(/^```\s*/, '').replace(/\s*```$/, '');
     }
 
-    // Find JSON array in response
-    const jsonMatch = jsonText.match(/\[[\s\S]*\]/);
-    if (jsonMatch) {
-      jsonText = jsonMatch[0];
+    // Try to find JSON object first
+    const jsonObjMatch = jsonText.match(/\{[\s\S]*\}/);
+    if (jsonObjMatch) {
+      jsonText = jsonObjMatch[0];
     }
 
-    const sections: SKKNSection[] = JSON.parse(jsonText);
+    const parsed = JSON.parse(jsonText);
 
-    // Validate và clean up
-    return sections.filter(s => s.id && s.title && typeof s.level === 'number');
+    // Nếu AI trả về object có sections
+    if (parsed && parsed.sections && Array.isArray(parsed.sections)) {
+      const sections: SKKNSection[] = parsed.sections.filter(
+        (s: any) => s.id && s.title && typeof s.level === 'number'
+      );
+      return {
+        sections,
+        contentGuidelines: parsed.contentGuidelines || '',
+        pageLimitFromTemplate: typeof parsed.pageLimitFromTemplate === 'number' ? parsed.pageLimitFromTemplate : 0,
+        headerFields: parsed.headerFields || {},
+      };
+    }
+
+    // Fallback: Nếu AI vẫn trả về array cũ
+    if (Array.isArray(parsed)) {
+      const sections: SKKNSection[] = parsed.filter(
+        (s: any) => s.id && s.title && typeof s.level === 'number'
+      );
+      return { sections };
+    }
+
+    return { sections: [] };
 
   } catch (error: any) {
     console.error('Lỗi trích xuất cấu trúc SKKN:', error);
-    // Trả về array rỗng nếu không parse được - sẽ fallback về mẫu chuẩn
-    return [];
+    return { sections: [] };
   }
 };
 

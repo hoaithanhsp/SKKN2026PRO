@@ -326,7 +326,8 @@ VIẾT PHẦN IV: GIẢI PHÁP THỰC HIỆN (10-15 trang) cho một đề tài 
 
 📌 KỸ THUẬT VIẾT:
 1. CẤU TRÚC KHOA HỌC:
-   - Mỗi giải pháp có: Mục tiêu - Đối tượng - Thời gian - Các bước - Công cụ - Tiêu chí đánh giá
+   - Mỗi giải pháp ĐI THẲNG VÀO: Nội dung & Quy trình thực hiện - Công cụ - Ví dụ minh họa cụ thể - Tiêu chí đánh giá
+   - ⚠️ BỎ QUA phần "Mục tiêu của giải pháp" và "Cơ sở khoa học của giải pháp" vì đã có ở phần Đặt vấn đề và Cơ sở lý luận.
    - Thời gian cụ thể: "Tuần 1 (15-19/10/2024): Chuẩn bị..."
 
 2. SỐ LIỆU LẺ + NGUỒN GỐC:
@@ -356,7 +357,7 @@ VIẾT PHẦN IV: GIẢI PHÁP THỰC HIỆN (10-15 trang) cho một đề tài 
 
 📌 CHECKLIST MỖI GIẢI PHÁP:
 **Tính khoa học:**
-- [ ] Có cấu trúc: Mục tiêu - Đối tượng - Thời gian - Các bước - Công cụ?
+- [ ] Có đi thẳng vào nội dung & quy trình thực hiện (KHÔNG viết mục tiêu, cơ sở khoa học riêng)?
 - [ ] Có ít nhất 1 bảng số liệu so sánh trước/sau?
 - [ ] Số liệu là số lẻ, có nguồn gốc rõ ràng?
 - [ ] Có tiêu chí đánh giá cụ thể?

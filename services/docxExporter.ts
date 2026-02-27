@@ -266,12 +266,87 @@ function elementsToDocxChildren(elements: ParsedElement[], numberingConfig: any[
 }
 
 /**
+ * Tạo phần đầu trang SKKN (CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM, Họ tên, Đơn vị...)
+ */
+function generateSKKNHeader(
+  headerFields: Record<string, string>,
+  userInfo: { topic?: string; school?: string; location?: string; subject?: string }
+): Paragraph[] {
+  const headerParagraphs: Paragraph[] = [];
+
+  // CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM
+  headerParagraphs.push(new Paragraph({
+    alignment: AlignmentType.CENTER,
+    spacing: { after: 0 },
+    children: [new TextRun({ text: 'CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM', bold: true, size: 26, font: 'Times New Roman' })]
+  }));
+  headerParagraphs.push(new Paragraph({
+    alignment: AlignmentType.CENTER,
+    spacing: { after: 200 },
+    children: [new TextRun({ text: 'Độc lập - Tự do - Hạnh phúc', bold: true, size: 26, font: 'Times New Roman' })]
+  }));
+
+  // Dấu gạch ngang
+  headerParagraphs.push(new Paragraph({
+    alignment: AlignmentType.CENTER,
+    spacing: { after: 400 },
+    children: [new TextRun({ text: '─────────────────────', size: 24, font: 'Times New Roman' })]
+  }));
+
+  // Tiêu đề ĐƠN ĐỀ NGHỊ XÉT, CÔNG NHẬN SÁNG KIẾN nếu mẫu có
+  const hasHeader = Object.keys(headerFields).length > 0;
+  if (hasHeader) {
+    headerParagraphs.push(new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 200, after: 400 },
+      children: [new TextRun({ text: 'ĐƠN ĐỀ NGHỊ XÉT, CÔNG NHẬN SÁNG KIẾN', bold: true, size: 28, font: 'Times New Roman' })]
+    }));
+
+    // Render từng trường header
+    const fieldMapping: Record<string, string> = {
+      hoTen: userInfo.topic ? '' : '', // Để trống cho người dùng tự điền
+      tenSangKien: userInfo.topic || '',
+      donViApDung: userInfo.school || '',
+      diaDiem: userInfo.location || '',
+      linhVuc: userInfo.subject || '',
+    };
+
+    for (const [key, label] of Object.entries(headerFields)) {
+      const value = fieldMapping[key] || '..........................................................';
+      headerParagraphs.push(new Paragraph({
+        spacing: { after: 80 },
+        indent: { left: 720 },
+        children: [
+          new TextRun({ text: `${label}: `, bold: true, size: 26, font: 'Times New Roman' }),
+          new TextRun({ text: value, size: 26, font: 'Times New Roman' }),
+        ]
+      }));
+    }
+
+    // Dấu cách trước nội dung chính
+    headerParagraphs.push(new Paragraph({ spacing: { after: 400 } }));
+  }
+
+  return headerParagraphs;
+}
+
+/**
  * Xuất Markdown sang file .docx
  */
-export async function exportMarkdownToDocx(markdown: string, filename: string): Promise<void> {
+export async function exportMarkdownToDocx(
+  markdown: string,
+  filename: string,
+  headerFields?: Record<string, string>,
+  userInfo?: { topic?: string; school?: string; location?: string; subject?: string }
+): Promise<void> {
   const elements = parseMarkdown(markdown);
   const numberingConfig: any[] = [];
   const children = elementsToDocxChildren(elements, numberingConfig);
+
+  // Tạo header SKKN nếu có headerFields
+  const headerParagraphs = (headerFields && Object.keys(headerFields).length > 0 && userInfo)
+    ? generateSKKNHeader(headerFields, userInfo)
+    : [];
 
   const doc = new Document({
     styles: {
@@ -319,7 +394,7 @@ export async function exportMarkdownToDocx(markdown: string, filename: string): 
           margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } // 1 inch margins
         }
       },
-      children: children
+      children: [...headerParagraphs, ...children]
     }]
   });
 

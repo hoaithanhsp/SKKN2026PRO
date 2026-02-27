@@ -160,7 +160,7 @@ const App: React.FC = () => {
     includePracticalExamples: false, // Thêm ví dụ thực tế
     includeStatistics: false, // Bổ sung bảng biểu thống kê
     requirementsConfirmed: false, // Đã xác nhận yêu cầu
-    includeSolution4_5: false, // Mặc định chỉ viết 3 giải pháp
+    numSolutions: 3, // Mặc định viết 3 giải pháp
     customTemplate: undefined // Cấu trúc mẫu SKKN tùy chỉnh (đã trích xuất)
   });
 
@@ -416,7 +416,7 @@ const App: React.FC = () => {
     const pages = userInfo.pageLimit;
     const wordsPerPage = 350; // 1 trang A4 ≈ 350 từ (font 13pt, line spacing 1.5)
     const charsPerPage = 2500;
-    const numSolutions = userInfo.includeSolution4_5 ? 5 : 3;
+    const numSolutions = userInfo.numSolutions || 3;
 
     // Phân bổ: I&II (5%), III (5%), IV-GP (85%), V&VI (5%)
     const partI_II_pages = Math.max(1, Math.round(pages * 0.05));
@@ -438,7 +438,7 @@ const App: React.FC = () => {
       perSolution: { pages: pagesPerSolution, words: pagesPerSolution * wordsPerPage, chars: pagesPerSolution * charsPerPage },
       partV_VI: { pages: partV_VI_pages, words: partV_VI_pages * wordsPerPage, chars: partV_VI_pages * charsPerPage },
     };
-  }, [userInfo.pageLimit, userInfo.includeSolution4_5]);
+  }, [userInfo.pageLimit, userInfo.numSolutions]);
 
   // Helper: Tạo prompt giới hạn số từ/trang cho MỘT phần cụ thể đang viết
   const getSectionPagePrompt = useCallback((sectionName: string, sectionKey: 'partI_II' | 'partIII' | 'perSolution' | 'partV_VI') => {
@@ -470,9 +470,9 @@ const App: React.FC = () => {
 🚨🚨🚨 GIỚI HẠN SỐ TRANG - BẮT BUỘC TUYỆT ĐỐI 🚨🚨🚨
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-📌 TỔNG SỐ TRANG YÊU CẦU: ${alloc.totalPages} TRANG(không tính Dàn ý và Phụ lục)
+📌 TỔNG SỐ TRANG YÊU CẦU: ${alloc.totalPages} TRANG (không tính Dàn ý và Phụ lục)
 
-📐 QUY ĐỔI CHUẨN(Font 13pt, Line spacing 1.5):
+📐 QUY ĐỔI CHUẨN (Font 13pt, Line spacing 1.5):
 • 1 trang A4 ≈ ${alloc.wordsPerPage} từ ≈ ${alloc.charsPerPage} ký tự
 • TỔNG CHO ${alloc.totalPages} TRANG: ≈ ${alloc.totalWords.toLocaleString()} từ ≈ ${alloc.totalChars.toLocaleString()} ký tự
 
@@ -487,15 +487,21 @@ const App: React.FC = () => {
 │ Phần V & VI + KL    │ ${alloc.partV_VI.pages} trang    │ ~${alloc.partV_VI.words.toLocaleString()} từ      │ ~${alloc.partV_VI.chars.toLocaleString()} ký tự     │
 └──────────────────────────────────────────────────────────────────┘
 
-⚠️ QUY TẮC NGHIÊM NGẶT:
-1. MỖI ĐOẠN VĂN: Tối đa 3 - 4 câu(≈ 60 - 80 từ)
-2. MỖI MỤC NHỎ: Tối đa 5 - 7 đoạn văn
-3. KHÔNG lặp lại ý, KHÔNG viết dư thừa
-4. VÍ DỤ MINH HỌA: Chỉ 1 - 2 ví dụ ngắn gọn / giải pháp(trừ khi yêu cầu thêm)
-5. BẢNG BIỂU: Giúp tiết kiệm không gian - ưu tiên sử dụng
+⚠️ QUY TẮC KIỂM SOÁT SỐ TRANG NGHIÊM NGẶT:
+1. TRƯỚC KHI VIẾT: Tính toán số từ cần viết cho phần HIỆN TẠI dựa trên bảng phân bổ.
+2. TRONG KHI VIẾT: Đếm số từ đã viết, DỪNG NGAY khi đạt đủ số từ phân bổ.
+3. SAU KHI VIẾT: Tự đánh giá số từ đã viết so với phân bổ. Nếu vượt > 15% → CẮT BỚT.
+4. MỖI ĐOẠN VĂN: Tối đa 3-4 câu (≈ 60-80 từ)
+5. MỖI MỤC NHỎ: Tối đa 5-7 đoạn văn
+6. KHÔNG lặp lại ý, KHÔNG viết dư thừa
+7. VÍ DỤ MINH HỌA: Chỉ 1-2 ví dụ ngắn gọn / giải pháp
+8. BẢNG BIỂU: Giúp tiết kiệm không gian - ưu tiên sử dụng
 
-🚫 CẢNH BÁO: NẾU VƯỢT QUÁ ${alloc.totalPages} TRANG → VI PHẠM YÊU CẦU!
-✅ MỤC TIÊU: Viết CÔ ĐỌNG, SÚC TÍCH nhưng vẫn ĐẦY ĐỦ NỘI DUNG.`);
+🚫🚫🚫 CẢNH BÁO NGHIÊM NGẶT:
+- NẾU VƯỢT QUÁ ${alloc.totalPages} TRANG (≈ ${alloc.totalWords.toLocaleString()} từ) → HOÀN TOÀN KHÔNG CHẤP NHẬN ĐƯỢC!
+- NẾU VIẾT THIẾU DƯỚI ${Math.max(1, Math.floor(alloc.totalPages * 0.8))} TRANG → CŨNG KHÔNG ĐẠT YÊU CẦU!
+- SỐ TRANG LÀ YÊU CẦU CỐT LÕI CỦA NGƯỜI DÙNG, PHẢI TUÂN THỦ 100%.
+✅ MỤC TIÊU: Viết ĐÚNG số trang yêu cầu, CÔ ĐỌNG, SÚC TÍCH nhưng vẫn ĐẦY ĐỦ NỘI DUNG.`);
     }
 
     // 2. Thêm bài toán thực tế, ví dụ minh họa
@@ -536,7 +542,7 @@ Hãy áp dụng CHÍNH XÁC các yêu cầu trên vào phần đang viết!`);
 ${requirements.join('\n')}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 `;
-  }, [userInfo.requirementsConfirmed, userInfo.pageLimit, userInfo.includePracticalExamples, userInfo.includeStatistics, userInfo.specialRequirements, userInfo.textbook, userInfo.includeSolution4_5, getPageAllocation]);
+  }, [userInfo.requirementsConfirmed, userInfo.pageLimit, userInfo.includePracticalExamples, userInfo.includeStatistics, userInfo.specialRequirements, userInfo.textbook, userInfo.numSolutions, getPageAllocation]);
 
   // Helper function để tạo prompt cấu trúc từ mẫu SKKN đã trích xuất
   const getCustomTemplatePrompt = useCallback(() => {
@@ -904,12 +910,13 @@ CẤU TRÚC SKKN BẬC CAO (TRUNG CẤP / CAO ĐẲNG / ĐẠI HỌC):
 
    GIẢI PHÁP 3: [Tên giải pháp - dựa trên nghiên cứu khoa học]
         [Cấu trúc tương tự, triển khai đầy đủ 5 mục]
-   ${userInfo.includeSolution4_5 ? `
+   ${(userInfo.numSolutions || 3) > 3 ? `
    GIẢI PHÁP 4: [Tên giải pháp nâng cao - ứng dụng công nghệ]
         [Giải pháp tích hợp LMS, AI, Virtual Lab...]
-
+   ${(userInfo.numSolutions || 3) > 4 ? `
    GIẢI PHÁP 5: [Tên giải pháp phát triển - hợp tác doanh nghiệp]
         [Giải pháp gắn kết đào tạo với thị trường lao động]
+   ` : ''}
    ` : ''}
    → MỐI LIÊN HỆ HỆ THỐNG GIỮA CÁC GIẢI PHÁP
 
@@ -1061,12 +1068,13 @@ CẤU TRÚC SKKN CHUẨN (ÁP DỤNG KHI KHÔNG CÓ MẪU RIÊNG):
 
    GIẢI PHÁP 3: [Tên giải pháp cụ thể, ấn tượng]
         [Cấu trúc tương tự giải pháp 1, triển khai đầy đủ 5 mục]
-   ${userInfo.includeSolution4_5 ? `
+   ${(userInfo.numSolutions || 3) > 3 ? `
    GIẢI PHÁP 4: [Tên giải pháp mở rộng/nâng cao]
         [Giải pháp bổ trợ, ứng dụng công nghệ nâng cao]
-
+   ${(userInfo.numSolutions || 3) > 4 ? `
    GIẢI PHÁP 5: [Tên giải pháp mở rộng/nâng cao]
         [Giải pháp phát triển, mở rộng đối tượng áp dụng]
+   ` : ''}
    ` : ''}
    → MỐI LIÊN HỆ GIỮA CÁC GIẢI PHÁP (giải thích tính hệ thống, logic)
 
@@ -1130,7 +1138,7 @@ YÊU CẦU DÀN Ý(NGẮN GỌN - CHỈ ĐẦU MỤC):
 ⚠️ QUAN TRỌNG: Dàn ý phải NGẮN GỌN, chỉ liệt kê CÁC ĐẦU MỤC CHÍNH.
 Nội dung chi tiết sẽ được triển khai ở các bước viết sau.
 
-✓ ${userInfo.includeSolution4_5 ? '5 GIẢI PHÁP (bao gồm 2 giải pháp mở rộng/nâng cao)' : 'CHỈ 3 GIẢI PHÁP'} - liệt kê TÊN giải pháp, không triển khai chi tiết
+✓ ${userInfo.numSolutions || 3} GIẢI PHÁP - liệt kê TÊN giải pháp, không triển khai chi tiết
 ✓ Mỗi phần chỉ ghi tiêu đề mục và các ý chính(1 - 2 dòng mỗi ý)
 ✓ KHÔNG viết đoạn văn dài trong dàn ý
 ✓ KHÔNG triển khai chi tiết nội dung - chỉ gợi ý hướng đi
@@ -1515,7 +1523,7 @@ SGK: ${userInfo.textbook}
           skipAppend: true // Không append vào fullDocument để tránh lặp nội dung
         },
         // GP3 Review → GP4 hoặc PART_V_VI (Viết sau khi approve GP3)
-        [GenerationStep.PART_IV_SOL3_REVIEW]: userInfo.includeSolution4_5
+        [GenerationStep.PART_IV_SOL3_REVIEW]: (userInfo.numSolutions || 3) > 3
           ? {
             prompt: `
                 BẮT ĐẦU phản hồi bằng MENU NAVIGATION trạng thái(Viết Giải pháp 4 - Đang thực hiện).
@@ -1694,7 +1702,14 @@ ${CONCLUSION_GUIDE}
     try {
       const { exportMarkdownToDocx } = await import('./services/docxExporter');
       const filename = `SKKN_${userInfo.topic.substring(0, 30).replace(/[^a-zA-Z0-9\u00C0-\u1EF9]/g, '_')}.docx`;
-      await exportMarkdownToDocx(state.fullDocument, filename);
+      // Truyền headerFields để tạo phần đầu SKKN trong Word
+      const templateHeaderFields = customTemplateData?.headerFields || {};
+      await exportMarkdownToDocx(state.fullDocument, filename, templateHeaderFields, {
+        topic: userInfo.topic,
+        school: userInfo.school,
+        location: userInfo.location,
+        subject: userInfo.subject,
+      });
     } catch (error: any) {
       console.error('Export error:', error);
       alert('Có lỗi khi xuất file. Vui lòng thử lại.');
@@ -2247,7 +2262,7 @@ Tổ: [Tổ chuyên môn]
               // Luôn ẩn step Phụ lục (15) và Hoàn tất (16)
               if (stepNum > 14) return null;
               // Ẩn step Giải pháp 4,5 và Review GP4/5 (step 10-13) và Phần V-VI (step 14) nếu không chọn
-              if (stepNum >= 10 && stepNum <= 14 && !userInfo.includeSolution4_5) return null;
+              if (stepNum >= 10 && stepNum <= 14 && (userInfo.numSolutions || 3) <= 3) return null;
             }
 
             let statusColor = "text-gray-400 border-gray-200";
@@ -2419,6 +2434,11 @@ Tổ: [Tổ chuyên môn]
     if (template) {
       handleUserChange('customTemplate', JSON.stringify(template) as any);
       setTemplateSectionsCount(template.sections.length);
+
+      // Auto-fill pageLimit nếu mẫu ghi rõ số trang
+      if (template.pageLimitFromTemplate && template.pageLimitFromTemplate > 0) {
+        handleUserChange('pageLimit', template.pageLimitFromTemplate as any);
+      }
     }
     setTemplateFileName(fileName);
     setWizardStep(WizardStep.SETUP_INFO);
