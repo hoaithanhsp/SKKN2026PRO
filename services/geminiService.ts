@@ -336,7 +336,7 @@ export const extractSKKNStructure = async (
 
   const prompt = `Bạn là chuyên gia phân tích cấu trúc tài liệu SKKN (Sáng kiến Kinh nghiệm).
 
-NHIỆM VỤ: Phân tích MẪU YÊU CẦU SKKN sau và TRÍCH XUẤT CHÍNH XÁC cấu trúc các mục/phần.
+NHIỆM VỤ: Phân tích MẪU YÊU CẦU SKKN sau và TRÍCH XUẤT CHÍNH XÁC cấu trúc các mục/phần cốt lõi cần viết.
 
 ═══════════════════════════════════════════════════════════════
 MẪU SKKN CẦN PHÂN TÍCH:
@@ -347,22 +347,21 @@ ${truncatedContent}
 TRẢ VỀ JSON ARRAY với format CHÍNH XÁC sau (KHÔNG có text khác, CHỈ JSON):
 
 [
-  {"id": "1", "level": 1, "title": "PHẦN I: ĐẶT VẤN ĐỀ"},
-  {"id": "1.1", "level": 2, "title": "1. Lý do chọn đề tài"},
-  {"id": "1.2", "level": 2, "title": "2. Mục đích nghiên cứu"},
-  {"id": "2", "level": 1, "title": "PHẦN II: NỘI DUNG"},
-  {"id": "2.1", "level": 2, "title": "1. Cơ sở lý luận"},
-  {"id": "2.1.1", "level": 3, "title": "1.1. Khái niệm"},
+  {"id": "1", "level": 1, "title": "PHẦN I: ĐẶT VẤN ĐỀ", "suggestedContent": "Nêu rõ lý do, bối cảnh chọn đề tài..."},
+  {"id": "1.1", "level": 2, "title": "1. Lý do chọn đề tài", "suggestedContent": "Trình bày sự cần thiết của giải pháp tại đơn vị"},
+  {"id": "2", "level": 1, "title": "PHẦN II: NỘI DUNG SÁNG KIẾN", "suggestedContent": ""},
   ...
 ]
 
-QUY TẮC QUAN TRỌNG:
-1. level 1: Phần lớn nhất (PHẦN I, PHẦN II, CHƯƠNG 1, MỤC A...)
-2. level 2: Mục con (1., 2., I.1., 1.1...)  
-3. level 3: Mục nhỏ hơn (a., b., 1.1.1., 1.1.2...)
-4. Giữ NGUYÊN tiêu đề gốc trong mẫu (không dịch, không sửa)
-5. Trích xuất TẤT CẢ các mục có trong mẫu
-6. CHỈ TRẢ VỀ JSON ARRAY, KHÔNG giải thích, KHÔNG markdown code block
+QUY TẮC QUAN TRỌNG TỐI CAO:
+1. BỎ QUA HOÀN TOÀN CÁC THÔNG TIN HÀNH CHÍNH, FORM ĐIỀN THÔNG TIN CÁ NHÂN (Họ và tên, Chức vụ, Đơn vị, Ngày sinh, Điện thoại, Lĩnh vực áp dụng, Tác giả, Đồng tác giả...). Hệ thống đã có form thu thập riêng!
+2. CHỈ TRÍCH XUẤT cấu trúc phần NỘI DUNG CỐT LÕI của bản báo cáo SKKN (ví dụ: Mô tả giải pháp đã biết, Nội dung giải pháp đề nghị, Tính mới, Hiệu quả, Khả năng nhân rộng, Kết luận, Kiến nghị...).
+3. level 1: Phần lớn nhất (PHẦN I, PHẦN II, CHƯƠNG 1, MỤC I lớn...) - Tập trung tạo Level 1 cho các nhóm nội dung mô tả giải pháp.
+4. level 2: Mục con cấp 1 (1., 2., 3....)
+5. level 3: Mục con cấp 2 (a., b., c....)
+6. Giữ NGUYÊN tiêu đề gốc trong mẫu.
+7. Trường \`suggestedContent\`: Nếu mẫu có giải thích/gợi ý cách viết cho mục đó, hãy tóm tắt ngắn gọn vào trường này để AI dựa vào đó sinh văn bản.
+8. CHỈ TRẢ VỀ JSON ARRAY, KHÔNG giải thích, KHÔNG markdown code block.
 
 BẮT ĐẦU JSON NGAY:`;
 
