@@ -1424,11 +1424,25 @@ Bạn đã viết xong toàn bộ nội dung chính của SKKN theo đúng cấu
               ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
               
               Thông tin đề tài: "${userInfo.topic}"
-Môn: ${userInfo.subject} - Lớp: ${userInfo.grade}
-Trường: ${userInfo.school}
+Môn: ${userInfo.subject} - Lớp: ${userInfo.grade} - Cấp: ${userInfo.level}
+Trường: ${userInfo.school}, ${userInfo.location}
 SGK: ${userInfo.textbook}
               Công nghệ / AI: ${userInfo.applyAI}
               CSVC hiện có: ${userInfo.facilities}
+              Trọng tâm đề tài: ${userInfo.focus || 'Theo dàn ý đã duyệt'}
+              
+              ╔═══════════════════════════════════════════════════════╗
+              ║  🚨 DÀN Ý ĐÃ DUYỆT - BẮT BUỘC BÁM SÁT 🚨          ║
+              ╚═══════════════════════════════════════════════════════╝
+              ${state.fullDocument ? `Dưới đây là DÀN Ý ĐÃ ĐƯỢC DUYỆT. Giải pháp 1 PHẢI viết ĐÚNG theo tên và nội dung đã ghi trong dàn ý:
+              
+${state.fullDocument.substring(0, 3000)}
+
+⚠️ BẮT BUỘC:
+- Tên giải pháp PHẢI TRÙNG KHỚP với tên giải pháp trong dàn ý trên.
+- Nội dung giải pháp PHẢI xoay quanh đề tài "${userInfo.topic}" và phù hợp với môn ${userInfo.subject}, cấp ${userInfo.level}.
+- TUYỆT ĐỐI KHÔNG viết giải pháp lạc đề hoặc không liên quan đến đề tài.
+- Mọi ví dụ, bài học minh họa phải thuộc môn ${userInfo.subject}, khối ${userInfo.grade}.` : 'Chưa có dàn ý - viết theo đề tài.'}
               
               YÊU CẦU:
               Hãy viết chi tiết GIẢI PHÁP 1(Giải pháp trọng tâm nhất) tuân thủ nghiêm ngặt 10 NGUYÊN TẮC VÀNG.
@@ -1467,6 +1481,15 @@ SGK: ${userInfo.textbook}
               Tiếp tục giữ vững vai trò CHUYÊN GIA GIÁO DỤC(ULTRA MODE).
               
               Nhiệm vụ: Viết chi tiết GIẢI PHÁP 2 cho đề tài: "${userInfo.topic}".
+              Môn: ${userInfo.subject} - Lớp: ${userInfo.grade} - Cấp: ${userInfo.level}
+              Trường: ${userInfo.school}, ${userInfo.location}
+              
+              ╔═══════════════════════════════════════════════════════╗
+              ║  🚨 NHẮC LẠI DÀN Ý - BẮT BUỘC BÁM SÁT 🚨          ║
+              ╚═══════════════════════════════════════════════════════╝
+              ⚠️ BẮT BUỘC: Tên GIẢI PHÁP 2 PHẢI TRÙNG KHỚP với tên giải pháp 2 trong dàn ý đã duyệt ở trên.
+              Nội dung PHẢI xoay quanh đề tài "${userInfo.topic}", phù hợp môn ${userInfo.subject}.
+              TUYỆT ĐỐI KHÔNG viết lạc đề hoặc chuyển sang chủ đề khác.
               
               Yêu cầu:
 1. Nội dung độc đáo, KHÔNG trùng lặp với Giải pháp 1.
@@ -1499,6 +1522,15 @@ SGK: ${userInfo.textbook}
               Tiếp tục giữ vững vai trò CHUYÊN GIA GIÁO DỤC(ULTRA MODE).
               
               Nhiệm vụ: Viết chi tiết GIẢI PHÁP 3 cho đề tài: "${userInfo.topic}".
+              Môn: ${userInfo.subject} - Lớp: ${userInfo.grade} - Cấp: ${userInfo.level}
+              Trường: ${userInfo.school}, ${userInfo.location}
+              
+              ╔═══════════════════════════════════════════════════════╗
+              ║  🚨 NHẮC LẠI DÀN Ý - BẮT BUỘC BÁM SÁT 🚨          ║
+              ╚═══════════════════════════════════════════════════════╝
+              ⚠️ BẮT BUỘC: Tên GIẢI PHÁP 3 PHẢI TRÙNG KHỚP với tên giải pháp 3 trong dàn ý đã duyệt.
+              Nội dung PHẢI xoay quanh đề tài "${userInfo.topic}", phù hợp môn ${userInfo.subject}.
+              TUYỆT ĐỐI KHÔNG viết lạc đề hoặc chuyển sang chủ đề khác.
               
               Yêu cầu:
 1. Nội dung độc đáo, KHÔNG trùng lặp với Giải pháp 1 và 2.
@@ -1531,6 +1563,10 @@ SGK: ${userInfo.textbook}
                 Tiếp tục giữ vững vai trò CHUYÊN GIA GIÁO DỤC(ULTRA MODE).
                 
                 Nhiệm vụ: Viết chi tiết GIẢI PHÁP 4(Mở rộng / Nâng cao) cho đề tài: "${userInfo.topic}".
+                Môn: ${userInfo.subject} - Lớp: ${userInfo.grade} - Cấp: ${userInfo.level}
+                
+                ⚠️ BẮT BUỘC: Tên GIẢI PHÁP 4 PHẢI TRÙNG KHỚP với dàn ý đã duyệt.
+                Nội dung PHẢI xoay quanh đề tài "${userInfo.topic}", phù hợp môn ${userInfo.subject}.
                 
                 ⚠️ LƯU Ý: Đây là giải pháp MỞ RỘNG và NÂNG CAO.
                 Có thể là: Ứng dụng công nghệ / AI nâng cao, phát triển mở rộng đối tượng...
