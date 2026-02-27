@@ -216,7 +216,7 @@ export const TemplateUploadStep: React.FC<Props> = ({
                         <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
                         <span className="text-xs font-semibold text-orange-700 tracking-wide uppercase">AI-Powered • Gemini</span>
                     </div>
-                    <p className="text-gray-500 text-sm max-w-md mx-auto">TRỢ LÝ VIẾT MỌI MẪU SKKN CÁC SỞ — Tạo SKKN chất lượng cao trong vài phút</p>
+                    <p className="text-lg md:text-xl font-extrabold max-w-md mx-auto tracking-wide" style={{ background: 'linear-gradient(135deg, #ea580c, #dc2626, #f59e0b)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', textShadow: '0 2px 4px rgba(234,88,12,0.15)', filter: 'drop-shadow(0 2px 4px rgba(234,88,12,0.2))' }}>TRỢ LÝ VIẾT MỌI MẪU SKKN CÁC SỞ</p>
                 </div>
 
                 {/* Main Card - Glassmorphism */}
@@ -426,7 +426,7 @@ export const TemplateUploadStep: React.FC<Props> = ({
                 </div>
 
                 {/* Footer text */}
-                <p className="text-center text-xs text-gray-400 mt-6">
+                <p className="text-center text-sm font-bold mt-6" style={{ background: 'linear-gradient(135deg, #ea580c, #dc2626, #f59e0b)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', filter: 'drop-shadow(0 1px 3px rgba(234,88,12,0.18))' }}>
                     SKKN 2026 PRO V2 • TRỢ LÝ VIẾT MỌI MẪU SKKN CÁC SỞ
                 </p>
             </div>
