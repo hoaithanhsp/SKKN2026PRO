@@ -199,28 +199,35 @@ export const TemplateUploadStep: React.FC<Props> = ({
         : [];
 
     return (
-        <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
+        <div className="min-h-screen flex items-center justify-center p-4 hero-bg">
             <div className="w-full max-w-2xl">
-                {/* Header */}
-                <div className="text-center mb-8">
-                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg shadow-blue-500/30 mb-4">
-                        <Sparkles className="w-8 h-8 text-white" />
+                {/* Hero Header - Premium 3D */}
+                <div className="text-center mb-10">
+                    {/* 3D Floating Icon */}
+                    <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-gradient-to-br from-orange-500 via-orange-400 to-amber-500 hero-icon-3d mb-6">
+                        <Sparkles className="w-10 h-10 text-white drop-shadow-lg" />
                     </div>
-                    <h1 className="text-3xl font-extrabold text-gray-900 mb-2" style={{ fontFamily: 'Nunito, sans-serif' }}>
-                        SKKN 2026 PRO
+                    {/* Title with shimmer gradient */}
+                    <h1 className="text-4xl md:text-5xl font-black mb-3 hero-title tracking-tight" style={{ fontFamily: 'Nunito, sans-serif' }}>
+                        SKKN 2026 PRO V2
                     </h1>
-                    <p className="text-gray-500 text-sm">Trợ lý viết Sáng kiến Kinh nghiệm thông minh</p>
+                    {/* PRO Badge */}
+                    <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-gradient-to-r from-orange-100 to-amber-100 border border-orange-200 mb-3">
+                        <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                        <span className="text-xs font-semibold text-orange-700 tracking-wide uppercase">AI-Powered • Gemini</span>
+                    </div>
+                    <p className="text-gray-500 text-sm max-w-md mx-auto">TRỢ LÝ VIẾT MỌI MẪU SKKN CÁC SỞ — Tạo SKKN chất lượng cao trong vài phút</p>
                 </div>
 
-                {/* Main Card */}
-                <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-                    {/* Card Header */}
-                    <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-5 text-white">
-                        <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center text-sm font-bold">1</div>
+                {/* Main Card - Glassmorphism */}
+                <div className="bg-white/80 rounded-3xl shadow-2xl border border-white/60 overflow-hidden hero-card" style={{ boxShadow: '0 25px 60px -12px rgba(249,115,22,0.15), 0 0 0 1px rgba(255,255,255,0.5)' }}>
+                    {/* Card Header - Animated Gradient */}
+                    <div className="hero-card-header px-6 py-5 text-white">
+                        <div className="flex items-center gap-3 relative z-10">
+                            <div className="w-9 h-9 rounded-xl hero-badge flex items-center justify-center text-sm font-bold shadow-lg">1</div>
                             <div>
-                                <h2 className="text-lg font-bold">Tải lên mẫu yêu cầu SKKN</h2>
-                                <p className="text-blue-100 text-sm mt-0.5">File Word hoặc PDF mẫu từ Sở/Phòng Giáo dục</p>
+                                <h2 className="text-lg font-bold drop-shadow-sm">Tải lên mẫu yêu cầu SKKN</h2>
+                                <p className="text-white/80 text-sm mt-0.5">File Word hoặc PDF mẫu từ Sở/Phòng Giáo dục</p>
                             </div>
                         </div>
                     </div>
@@ -238,10 +245,10 @@ export const TemplateUploadStep: React.FC<Props> = ({
                                     className={`
                     relative cursor-pointer rounded-xl border-2 border-dashed transition-all duration-300 p-8
                     ${isProcessing || isExtracting
-                                            ? 'border-blue-300 bg-blue-50/50 cursor-wait'
+                                            ? 'border-orange-300 bg-orange-50/50 cursor-wait'
                                             : isDragging
-                                                ? 'border-blue-500 bg-blue-50 scale-[1.02] shadow-lg shadow-blue-100'
-                                                : 'border-gray-300 bg-gray-50/50 hover:border-blue-400 hover:bg-blue-50/30 hover:shadow-md'
+                                                ? 'border-orange-500 bg-orange-50 scale-[1.02] shadow-lg shadow-orange-100'
+                                                : 'border-gray-300 bg-gray-50/50 hover:border-orange-400 hover:bg-orange-50/30 hover:shadow-md'
                                         }
                   `}
                                 >
@@ -256,21 +263,21 @@ export const TemplateUploadStep: React.FC<Props> = ({
                                     <div className="text-center">
                                         {isProcessing || isExtracting ? (
                                             <div className="flex flex-col items-center gap-3">
-                                                <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
+                                                <Loader2 className="w-12 h-12 text-orange-500 animate-spin" />
                                                 <div>
-                                                    <p className="text-blue-700 font-semibold text-sm">{progress || 'Đang xử lý...'}</p>
+                                                    <p className="text-orange-700 font-semibold text-sm">{progress || 'Đang xử lý...'}</p>
                                                     {isExtracting && (
-                                                        <p className="text-blue-500 text-xs mt-1">AI đang phân tích cấu trúc mẫu SKKN...</p>
+                                                        <p className="text-orange-500 text-xs mt-1">AI đang phân tích cấu trúc mẫu SKKN...</p>
                                                     )}
                                                 </div>
                                             </div>
                                         ) : (
                                             <>
-                                                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center mx-auto mb-4">
-                                                    <Upload className="w-7 h-7 text-blue-600" />
+                                                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-orange-100 to-indigo-100 flex items-center justify-center mx-auto mb-4">
+                                                    <Upload className="w-7 h-7 text-orange-600" />
                                                 </div>
                                                 <p className="text-gray-700 font-semibold mb-1">
-                                                    Kéo thả file vào đây hoặc <span className="text-blue-600 underline">chọn file</span>
+                                                    Kéo thả file vào đây hoặc <span className="text-orange-600 underline">chọn file</span>
                                                 </p>
                                                 <p className="text-gray-400 text-xs">
                                                     Hỗ trợ: PDF, Word (.docx), TXT • Tối đa 100MB
@@ -334,8 +341,8 @@ export const TemplateUploadStep: React.FC<Props> = ({
                                 {/* Kết quả phân tích - danh sách sections */}
                                 {parsedTemplate.sections.length > 0 ? (
                                     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-                                        <div className="px-4 py-3 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-100">
-                                            <p className="text-sm font-semibold text-blue-800 flex items-center gap-2">
+                                        <div className="px-4 py-3 bg-gradient-to-r from-orange-50 to-indigo-50 border-b border-gray-100">
+                                            <p className="text-sm font-semibold text-orange-800 flex items-center gap-2">
                                                 <CheckCircle size={16} className="text-emerald-500" />
                                                 Trích xuất được {parsedTemplate.sections.length} mục từ mẫu
                                             </p>
@@ -363,7 +370,7 @@ export const TemplateUploadStep: React.FC<Props> = ({
                                             {parsedTemplate.sections.length > 10 && (
                                                 <button
                                                     onClick={() => setShowAllSections(!showAllSections)}
-                                                    className="mt-2 text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1 font-medium"
+                                                    className="mt-2 text-xs text-orange-600 hover:text-orange-800 flex items-center gap-1 font-medium"
                                                 >
                                                     {showAllSections ? (
                                                         <>
@@ -395,7 +402,7 @@ export const TemplateUploadStep: React.FC<Props> = ({
                                 {/* CTA Continue */}
                                 <button
                                     onClick={handleContinue}
-                                    className="w-full py-4 px-6 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl font-bold text-base shadow-lg shadow-blue-500/25 hover:shadow-xl hover:shadow-blue-500/30 transition-all flex items-center justify-center gap-2"
+                                    className="w-full py-4 px-6 bg-gradient-to-r from-orange-600 to-indigo-600 hover:from-orange-700 hover:to-indigo-700 text-white rounded-xl font-bold text-base shadow-lg shadow-orange-500/25 hover:shadow-xl hover:shadow-orange-500/30 transition-all flex items-center justify-center gap-2"
                                 >
                                     Tiếp tục → Thiết lập Thông tin Sáng kiến
                                     <ArrowRight size={18} />
@@ -409,7 +416,7 @@ export const TemplateUploadStep: React.FC<Props> = ({
                         <div className="pt-4 border-t border-gray-100">
                             <button
                                 onClick={onSkipTemplate}
-                                className="w-full py-3 px-4 text-gray-500 hover:text-blue-700 hover:bg-blue-50 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2"
+                                className="w-full py-3 px-4 text-gray-500 hover:text-orange-700 hover:bg-orange-50 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2"
                             >
                                 <span>Không có mẫu?</span>
                                 <span className="font-semibold">Dùng mẫu chuẩn Bộ GD&ĐT →</span>
@@ -420,7 +427,7 @@ export const TemplateUploadStep: React.FC<Props> = ({
 
                 {/* Footer text */}
                 <p className="text-center text-xs text-gray-400 mt-6">
-                    SKKN 2026 PRO • Trợ lý viết Sáng kiến Kinh nghiệm bằng AI
+                    SKKN 2026 PRO V2 • TRỢ LÝ VIẾT MỌI MẪU SKKN CÁC SỞ
                 </p>
             </div>
         </div>

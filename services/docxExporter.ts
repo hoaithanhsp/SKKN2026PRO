@@ -32,7 +32,102 @@ interface ParsedElement {
 }
 
 /**
- * Parse inline formatting (bold, italic) và trả về array TextRun
+ * Chuyển đổi LaTeX commands sang Unicode symbols để hiển thị đúng trong Word
+ */
+function convertLatexToUnicode(latex: string): string {
+  let result = latex;
+
+  // 1. Xử lý \frac{a}{b} → a/b hoặc (a)/(b)
+  result = result.replace(/\\frac\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g, '($1)/($2)');
+
+  // 2. Xử lý \bar{X} → X̄ (combining overline)
+  result = result.replace(/\\bar\{([^{}]+)\}/g, '$1\u0304');
+  result = result.replace(/\\overline\{([^{}]+)\}/g, '$1\u0304');
+
+  // 3. Xử lý \hat{X} → X̂
+  result = result.replace(/\\hat\{([^{}]+)\}/g, '$1\u0302');
+
+  // 4. Xử lý \tilde{X} → X̃
+  result = result.replace(/\\tilde\{([^{}]+)\}/g, '$1\u0303');
+
+  // 5. Xử lý \sqrt{x} → √x, \sqrt[n]{x} → ⁿ√x
+  result = result.replace(/\\sqrt\[(\d+)\]\{([^{}]+)\}/g, (_, n, content) => {
+    const superscripts: Record<string, string> = { '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹', 'n': 'ⁿ' };
+    return (superscripts[n] || n) + '√' + content;
+  });
+  result = result.replace(/\\sqrt\{([^{}]+)\}/g, '√$1');
+
+  // 6. Xử lý superscript/subscript đơn giản
+  result = result.replace(/\^(\{[^{}]+\}|\w)/g, (_, content) => {
+    const clean = content.replace(/[{}]/g, '');
+    const supMap: Record<string, string> = {
+      '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹',
+      'n': 'ⁿ', 'i': 'ⁱ', '+': '⁺', '-': '⁻', '=': '⁼', '(': '⁽', ')': '⁾'
+    };
+    let sup = '';
+    for (const ch of clean) sup += supMap[ch] || ch;
+    return sup;
+  });
+
+  result = result.replace(/_(\{[^{}]+\}|\w)/g, (_, content) => {
+    const clean = content.replace(/[{}]/g, '');
+    const subMap: Record<string, string> = {
+      '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄', '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉',
+      'a': 'ₐ', 'e': 'ₑ', 'i': 'ᵢ', 'o': 'ₒ', 'n': 'ₙ', '+': '₊', '-': '₋', '=': '₌', '(': '₍', ')': '₎'
+    };
+    let sub = '';
+    for (const ch of clean) sub += subMap[ch] || ch;
+    return sub;
+  });
+
+  // 7. Greek letters
+  const greekMap: Record<string, string> = {
+    '\\alpha': 'α', '\\beta': 'β', '\\gamma': 'γ', '\\delta': 'δ', '\\epsilon': 'ε', '\\varepsilon': 'ε',
+    '\\zeta': 'ζ', '\\eta': 'η', '\\theta': 'θ', '\\vartheta': 'ϑ', '\\iota': 'ι', '\\kappa': 'κ',
+    '\\lambda': 'λ', '\\mu': 'μ', '\\nu': 'ν', '\\xi': 'ξ', '\\pi': 'π', '\\rho': 'ρ',
+    '\\sigma': 'σ', '\\tau': 'τ', '\\upsilon': 'υ', '\\phi': 'φ', '\\varphi': 'ϕ', '\\chi': 'χ',
+    '\\psi': 'ψ', '\\omega': 'ω',
+    '\\Gamma': 'Γ', '\\Delta': 'Δ', '\\Theta': 'Θ', '\\Lambda': 'Λ', '\\Xi': 'Ξ', '\\Pi': 'Π',
+    '\\Sigma': 'Σ', '\\Phi': 'Φ', '\\Psi': 'Ψ', '\\Omega': 'Ω',
+  };
+  for (const [cmd, sym] of Object.entries(greekMap)) {
+    result = result.split(cmd).join(sym);
+  }
+
+  // 8. Math operators & symbols
+  const symbolMap: Record<string, string> = {
+    '\\implies': '⟹', '\\Rightarrow': '⇒', '\\Leftarrow': '⇐', '\\Leftrightarrow': '⇔',
+    '\\rightarrow': '→', '\\leftarrow': '←', '\\leftrightarrow': '↔',
+    '\\leq': '≤', '\\geq': '≥', '\\neq': '≠', '\\approx': '≈', '\\equiv': '≡',
+    '\\pm': '±', '\\mp': '∓', '\\times': '×', '\\div': '÷', '\\cdot': '·',
+    '\\infty': '∞', '\\partial': '∂', '\\nabla': '∇',
+    '\\in': '∈', '\\notin': '∉', '\\subset': '⊂', '\\supset': '⊃', '\\subseteq': '⊆', '\\supseteq': '⊇',
+    '\\cup': '∪', '\\cap': '∩', '\\emptyset': '∅',
+    '\\forall': '∀', '\\exists': '∃', '\\neg': '¬', '\\land': '∧', '\\lor': '∨',
+    '\\int': '∫', '\\iint': '∬', '\\iiint': '∭', '\\oint': '∮',
+    '\\sum': '∑', '\\prod': '∏', '\\lim': 'lim',
+    '\\sin': 'sin', '\\cos': 'cos', '\\tan': 'tan', '\\log': 'log', '\\ln': 'ln', '\\exp': 'exp',
+    '\\to': '→', '\\mapsto': '↦',
+    '\\ldots': '…', '\\cdots': '⋯', '\\vdots': '⋮', '\\ddots': '⋱',
+    '\\angle': '∠', '\\triangle': '△', '\\perp': '⊥', '\\parallel': '∥',
+    '\\propto': '∝', '\\sim': '∼', '\\simeq': '≃', '\\cong': '≅',
+    '\\prime': '′', '\\star': '⋆', '\\circ': '∘',
+    '\\quad': ' ', '\\qquad': '  ', '\\,': ' ', '\\;': ' ', '\\!': '',
+    '\\left': '', '\\right': '', '\\text': '', '\\mathrm': '', '\\mathbf': '',
+  };
+  for (const [cmd, sym] of Object.entries(symbolMap)) {
+    result = result.split(cmd).join(sym);
+  }
+
+  // 9. Clean up remaining braces and backslashes
+  result = result.replace(/\{([^{}]*)\}/g, '$1'); // Remove simple braces
+  result = result.replace(/\\([a-zA-Z]+)/g, '$1'); // Remove remaining unknown commands, keep text
+
+  return result.trim();
+}
+
+/**
+ * Parse inline formatting (bold, italic, LaTeX) và trả về array TextRun
  */
 function parseInlineFormatting(text: string): TextRun[] {
   const runs: TextRun[] = [];
@@ -43,11 +138,11 @@ function parseInlineFormatting(text: string): TextRun[] {
 
   while ((match = regex.exec(text)) !== null) {
     if (match[2]) {
-      // LaTeX block ($$...$$) → Cambria Math font
-      runs.push(new TextRun({ text: match[2].trim(), font: 'Cambria Math', italics: true, size: 26 }));
+      // LaTeX block ($$...$$) → Giữ nguyên dạng LaTeX chuẩn
+      runs.push(new TextRun({ text: '$$' + match[2].trim() + '$$', font: 'Cambria Math', italics: true, size: 26 }));
     } else if (match[4]) {
-      // LaTeX inline ($...$) → Cambria Math font
-      runs.push(new TextRun({ text: match[4].trim(), font: 'Cambria Math', italics: true, size: 26 }));
+      // LaTeX inline ($...$) → Giữ nguyên dạng LaTeX chuẩn
+      runs.push(new TextRun({ text: '$' + match[4].trim() + '$', font: 'Cambria Math', italics: true, size: 26 }));
     } else if (match[6]) {
       // Bold text
       runs.push(new TextRun({ text: match[6], bold: true }));

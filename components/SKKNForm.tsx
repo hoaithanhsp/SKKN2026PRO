@@ -415,12 +415,12 @@ export const SKKNForm: React.FC<Props> = ({ userInfo, onChange, onSubmit, onManu
         </div>
       )}
 
-      <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-6 text-white text-center">
+      <div className="bg-gradient-to-r from-orange-600 to-indigo-600 p-6 text-white text-center">
         <div className="flex items-center justify-center gap-2 mb-2">
           <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center text-sm font-bold">{templateFileName ? '2' : '1'}</div>
           <h2 className="text-2xl font-bold">Thiết lập Thông tin Sáng kiến</h2>
         </div>
-        <p className="text-blue-100 text-sm">Cung cấp thông tin chính xác để AI tạo ra bản thảo chất lượng nhất</p>
+        <p className="text-orange-100 text-sm">Cung cấp thông tin chính xác để AI tạo ra bản thảo chất lượng nhất</p>
       </div>
 
       <div className="p-8 space-y-8">
@@ -699,7 +699,7 @@ export const SKKNForm: React.FC<Props> = ({ userInfo, onChange, onSubmit, onManu
         <div>
           <h3 className="text-lg font-bold text-gray-800 border-b border-gray-200 pb-2 mb-4 uppercase tracking-wide flex items-center">
             3. Tài liệu tham khảo
-            <span className="ml-2 text-xs bg-blue-100 text-blue-800 py-1 px-2 rounded-full font-normal capitalize normal-case tracking-normal">
+            <span className="ml-2 text-xs bg-orange-100 text-orange-800 py-1 px-2 rounded-full font-normal capitalize normal-case tracking-normal">
               (Tùy chọn - Giúp AI bám sát nội dung)
             </span>
           </h3>
@@ -708,8 +708,8 @@ export const SKKNForm: React.FC<Props> = ({ userInfo, onChange, onSubmit, onManu
             {isProcessingRefFiles && (
               <div className="absolute inset-0 bg-white/80 flex items-center justify-center z-10 backdrop-blur-sm rounded-xl">
                 <div className="flex flex-col items-center gap-2">
-                  <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
-                  <p className="text-sm font-medium text-blue-700">{fileProgress || 'Đang đọc tài liệu...'}</p>
+                  <Loader2 className="w-8 h-8 text-orange-600 animate-spin" />
+                  <p className="text-sm font-medium text-orange-700">{fileProgress || 'Đang đọc tài liệu...'}</p>
                 </div>
               </div>
             )}
@@ -737,7 +737,7 @@ export const SKKNForm: React.FC<Props> = ({ userInfo, onChange, onSubmit, onManu
                 />
                 <button
                   onClick={() => refFileInputRef.current?.click()}
-                  className="text-xs font-semibold text-blue-600 bg-blue-50 px-2 py-1 rounded hover:bg-blue-100 transition-colors flex items-center gap-1 border border-blue-100"
+                  className="text-xs font-semibold text-orange-600 bg-orange-50 px-2 py-1 rounded hover:bg-orange-100 transition-colors flex items-center gap-1 border border-orange-100"
                 >
                   <FileUp size={12} /> Tải lên
                 </button>
@@ -749,7 +749,7 @@ export const SKKNForm: React.FC<Props> = ({ userInfo, onChange, onSubmit, onManu
                 <p className="text-xs text-gray-500 mb-2">Đã tải ({refFileNames.length} file):</p>
                 <div className="flex flex-wrap gap-1">
                   {refFileNames.map((name, index) => (
-                    <span key={index} className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
+                    <span key={index} className="inline-flex items-center gap-1 px-2 py-1 bg-orange-100 text-orange-800 text-xs rounded-full">
                       <FileText size={10} />
                       {name.length > 20 ? name.substring(0, 20) + '...' : name}
                     </span>
@@ -794,7 +794,7 @@ export const SKKNForm: React.FC<Props> = ({ userInfo, onChange, onSubmit, onManu
                 <FileUp size={24} className="mx-auto mb-2 opacity-50" />
                 <p className="text-xs font-medium text-gray-600 mb-2">Chưa có tài liệu</p>
                 <div className="text-xs text-left bg-white p-3 rounded-lg border border-gray-100">
-                  <p className="font-semibold text-blue-700 mb-1">💡 Gợi ý tài liệu tải lên:</p>
+                  <p className="font-semibold text-orange-700 mb-1">💡 Gợi ý tài liệu tải lên:</p>
                   <ul className="space-y-0.5 text-gray-600 text-[11px]">
                     <li>• SGK/Sách giáo viên</li>
                     <li>• Tài liệu chuyên môn</li>
@@ -940,9 +940,9 @@ export const SKKNForm: React.FC<Props> = ({ userInfo, onChange, onSubmit, onManu
         </div>
 
         {/* SECTION 5: MODE SELECTION */}
-        <div className="pt-6 border-t-2 border-blue-100">
+        <div className="pt-6 border-t-2 border-orange-100">
           <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-            <Sparkles size={20} className="text-blue-600" />
+            <Sparkles size={20} className="text-orange-600" />
             Tùy chọn khởi tạo
           </h3>
 
@@ -971,7 +971,7 @@ export const SKKNForm: React.FC<Props> = ({ userInfo, onChange, onSubmit, onManu
 
           {mode === 'ai' ? (
             <div className="space-y-4 animate-fadeIn">
-              <div className="bg-blue-50 p-4 rounded-lg text-sm text-blue-800 flex items-start gap-2">
+              <div className="bg-orange-50 p-4 rounded-lg text-sm text-orange-800 flex items-start gap-2">
                 <Sparkles className="w-5 h-5 flex-shrink-0 mt-0.5" />
                 <p>Hệ thống AI sẽ tự động phân tích đề tài và tạo ra dàn ý chi tiết gồm 6 phần chuẩn Bộ GD&ĐT. Bạn có thể chỉnh sửa lại sau khi tạo xong.</p>
               </div>
@@ -979,7 +979,7 @@ export const SKKNForm: React.FC<Props> = ({ userInfo, onChange, onSubmit, onManu
                 onClick={handleSubmitWithHistory}
                 disabled={!isInfoValid || isSubmitting}
                 isLoading={isSubmitting}
-                className="w-full py-4 text-lg font-bold shadow-blue-500/30 shadow-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+                className="w-full py-4 text-lg font-bold shadow-orange-500/30 shadow-lg bg-gradient-to-r from-orange-600 to-indigo-600 hover:from-orange-700 hover:to-indigo-700"
               >
                 {isSubmitting ? 'Đang khởi tạo...' : '🚀 Bắt đầu lập dàn ý ngay'}
               </Button>

@@ -157,13 +157,13 @@ const TitleAnalysisPanel: React.FC<TitleAnalysisPanelProps> = ({ result, onClose
                     )}
 
                     {/* Suggestions */}
-                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-5">
-                        <h3 className="font-bold text-blue-700 mb-4 flex items-center gap-2">
+                    <div className="bg-orange-50 border border-orange-200 rounded-xl p-5">
+                        <h3 className="font-bold text-orange-700 mb-4 flex items-center gap-2">
                             💡 Đề xuất tên thay thế
                         </h3>
                         <div className="space-y-3">
                             {result.suggestions.map((suggestion, index) => (
-                                <div key={index} className="bg-white rounded-lg p-4 border border-blue-100 hover:shadow-md transition-shadow">
+                                <div key={index} className="bg-white rounded-lg p-4 border border-orange-100 hover:shadow-md transition-shadow">
                                     <div className="flex items-start justify-between gap-3">
                                         <div className="flex-1">
                                             <p className="font-medium text-gray-800 mb-1">{suggestion.title}</p>
@@ -175,14 +175,14 @@ const TitleAnalysisPanel: React.FC<TitleAnalysisPanelProps> = ({ result, onClose
                                             </span>
                                             <button
                                                 onClick={() => handleCopy(suggestion.title, index)}
-                                                className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                                className="p-1.5 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded transition-colors"
                                                 title="Sao chép"
                                             >
                                                 {copiedIndex === index ? '✅' : '📋'}
                                             </button>
                                             <button
                                                 onClick={() => onSelectTitle(suggestion.title)}
-                                                className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                                                className="px-3 py-1.5 bg-orange-600 text-white text-xs font-medium rounded-lg hover:bg-orange-700 transition-colors"
                                             >
                                                 Sử dụng
                                             </button>

@@ -38,7 +38,7 @@ export const ExamView: React.FC<ExamViewProps> = ({ exam, onSubmit }) => {
         return (
           <div key={q.id} className="mb-8 p-6 bg-white rounded-xl border border-slate-100 shadow-sm">
             <h4 className="font-semibold text-lg text-slate-800 mb-4 flex gap-3">
-              <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded text-sm h-fit mt-1">Câu {index + 1}</span>
+              <span className="bg-orange-100 text-orange-700 px-2 py-1 rounded text-sm h-fit mt-1">Câu {index + 1}</span>
               {q.text}
             </h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -48,7 +48,7 @@ export const ExamView: React.FC<ExamViewProps> = ({ exam, onSubmit }) => {
                   onClick={() => handleMultipleChoice(q.id, c.id)}
                   className={`p-3 text-left rounded-lg border transition-all ${
                     answers[q.id] === c.id 
-                      ? 'border-blue-500 bg-blue-50 text-blue-800 ring-1 ring-blue-500' 
+                      ? 'border-orange-500 bg-orange-50 text-orange-800 ring-1 ring-orange-500' 
                       : 'border-slate-200 hover:bg-slate-50'
                   }`}
                 >
@@ -83,7 +83,7 @@ export const ExamView: React.FC<ExamViewProps> = ({ exam, onSubmit }) => {
                       <input 
                         type="radio" 
                         name={`${q.id}-${s.id}`}
-                        className="w-5 h-5 text-blue-600 focus:ring-blue-500"
+                        className="w-5 h-5 text-orange-600 focus:ring-orange-500"
                         checked={currentAns === true}
                         onChange={() => handleTrueFalse(q.id, s.id, true)}
                       />
@@ -166,7 +166,7 @@ export const ExamView: React.FC<ExamViewProps> = ({ exam, onSubmit }) => {
                 onClick={() => setCurrentPartIndex(idx)}
                 className={`px-3 py-1 text-sm rounded-full transition-colors ${
                   currentPartIndex === idx 
-                    ? 'bg-blue-600 text-white shadow-md' 
+                    ? 'bg-orange-600 text-white shadow-md' 
                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
               >
@@ -178,9 +178,9 @@ export const ExamView: React.FC<ExamViewProps> = ({ exam, onSubmit }) => {
       </div>
 
       <div className="px-4">
-        <div className="mb-6 bg-blue-50 border border-blue-100 p-4 rounded-lg">
-          <h3 className="font-bold text-blue-900 mb-1">{currentPart.title}</h3>
-          <p className="text-blue-700 text-sm">{currentPart.description}</p>
+        <div className="mb-6 bg-orange-50 border border-orange-100 p-4 rounded-lg">
+          <h3 className="font-bold text-orange-900 mb-1">{currentPart.title}</h3>
+          <p className="text-orange-700 text-sm">{currentPart.description}</p>
         </div>
 
         {currentPart.questions.map((q, idx) => renderQuestion(q, idx))}

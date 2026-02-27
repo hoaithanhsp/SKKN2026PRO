@@ -1,2791 +1,5582 @@
-﻿import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+
 import { UserInfo, GenerationStep, GenerationState, SKKNTemplate, SolutionsState, WizardStep } from './types';
+
 import { STEPS_INFO, SOLUTION_MODE_PROMPT, FALLBACK_MODELS, HIGHER_ED_LEVELS, HIGHER_ED_SYSTEM_INSTRUCTION } from './constants';
+
 import { initializeGeminiChat, sendMessageStream, getFriendlyErrorMessage, parseApiError, getChatHistory, setChatHistory } from './services/geminiService';
+
 import { apiKeyManager } from './services/apiKeyManager';
+
 import { getSubjectInfo } from './data/subjectsData';
+
 import { OUTLINE_GUIDE, INTRO_GUIDE, THEORY_GUIDE, REALITY_GUIDE, RESULT_GUIDE, CONCLUSION_GUIDE, APPENDIX_GUIDE, NATURAL_WRITING_TECHNIQUES } from './data/skknKnowledgeBase';
+
 import { SKKNForm } from './components/SKKNForm';
+
 import { TemplateUploadStep } from './components/TemplateUploadStep';
+
 import { DocumentPreview } from './components/DocumentPreview';
+
 import { Button } from './components/Button';
+
 import { ApiKeyModal } from './components/ApiKeyModal';
+
 import { Download, ChevronRight, Wand2, FileText, CheckCircle, RefreshCw, Settings, AlertTriangle, Save, Trash2 } from 'lucide-react';
+
+
 
 import { LockScreen } from './components/LockScreen';
 
-// Helper: Truncate text dÃ i cho AI prompt - giá»¯ pháº§n Ä‘áº§u (ná»™i dung chÃ­nh) vÃ  thÃ´ng bÃ¡o lÆ°á»£c bá»›t
-const MAX_REF_DOCS_FOR_PROMPT = 80000; // ~80K kÃ½ tá»± tá»‘i Ä‘a cho tÃ i liá»‡u tham kháº£o trong prompt
+
+
+// Helper: Truncate text dài cho AI prompt - giữ phần đầu (nội dung chính) và thông báo lược bớt
+
+const MAX_REF_DOCS_FOR_PROMPT = 80000; // ~80K ký tự tối đa cho tài liệu tham khảo trong prompt
+
+
 
 const truncateForPrompt = (text: string, maxChars: number = MAX_REF_DOCS_FOR_PROMPT): string => {
+
   if (!text || text.length <= maxChars) return text;
 
-  const truncated = text.substring(0, maxChars);
-  const removedChars = text.length - maxChars;
-  const estimatedPages = Math.round(removedChars / 2500); // ~2500 kÃ½ tá»±/trang A4
 
-  return truncated + `\n\n[... ÄÃƒ LÆ¯á»¢C Bá»šT ${removedChars.toLocaleString()} KÃ Tá»° (~${estimatedPages} trang) DO QUÃ DÃ€I. Ná»™i dung phÃ­a trÃªn Ä‘Ã£ Ä‘á»§ Ä‘á»ƒ tham kháº£o cÃ¡c Ã½ chÃ­nh ...]`;
+
+  const truncated = text.substring(0, maxChars);
+
+  const removedChars = text.length - maxChars;
+
+  const estimatedPages = Math.round(removedChars / 2500); // ~2500 ký tự/trang A4
+
+
+
+  return truncated + `\n\n[... ĐÃ LƯỢC BỚT ${removedChars.toLocaleString()} KĐ TỰ (~${estimatedPages} trang) DO QUĐ DÀI. Nội dung phía trên đã đủ để tham khảo các ý chính ...]`;
+
 };
 
-// SessionStorage key cho tÃ i liá»‡u tham kháº£o lá»›n
+
+
+// SessionStorage key cho tài liệu tham khảo lớn
+
 const SESSION_REF_DOCS_KEY = 'skkn_ref_docs';
+
 const SESSION_REF_NAMES_KEY = 'skkn_ref_file_names';
 
-// LocalStorage key cho lÆ°u/khÃ´i phá»¥c phiÃªn lÃ m viá»‡c
+
+
+// LocalStorage key cho lưu/khôi phục phiên làm việc
+
 const SESSION_SAVE_KEY = 'skkn_session_data';
 
+
+
 // Interface cho session data
+
 interface SessionData {
+
   userInfo: Omit<UserInfo, 'referenceDocuments'> & { hasReferenceDocuments: boolean };
+
   state: {
+
     step: GenerationStep;
+
     messages: Array<{ role: string; text: string }>;
+
     fullDocument: string;
+
   };
+
   solutionsState: SolutionsState;
+
   appendixDocument: string;
+
   outlineFeedback: string;
+
   chatHistory: any[];
+
   savedAt: string;
+
 }
 
+
+
 const App: React.FC = () => {
+
   // Lock Screen State
+
   const [isUnlocked, setIsUnlocked] = useState(false);
+
   const [checkingAuth, setCheckingAuth] = useState(true);
 
+
+
   // Wizard Step State (Template-First flow)
+
   const [wizardStep, setWizardStep] = useState<WizardStep>(WizardStep.UPLOAD_TEMPLATE);
+
   const [templateFileName, setTemplateFileName] = useState('');
+
   const [templateSectionsCount, setTemplateSectionsCount] = useState(0);
 
+
+
   // Session Restore State
+
   const [showRestoreModal, setShowRestoreModal] = useState(false);
+
   const [pendingSessionData, setPendingSessionData] = useState<SessionData | null>(null);
+
   const [sessionSavedAt, setSessionSavedAt] = useState<string | null>(null);
 
+
+
   // API Key State
+
   const [apiKey, setApiKey] = useState('');
+
   const [showApiModal, setShowApiModal] = useState(false);
+
   const [selectedModel, setSelectedModel] = useState(FALLBACK_MODELS[0]);
 
+
+
   // Check LocalStorage on Mount
+
   useEffect(() => {
+
     const authState = localStorage.getItem('skkn_app_unlocked');
+
     if (authState === 'true') {
+
       setIsUnlocked(true);
+
     }
 
-    // Load API key tá»« localStorage hoáº·c .env
+
+
+    // Load API key từ localStorage hoặc .env
+
     const savedKey = localStorage.getItem('gemini_api_key');
+
     const savedModel = localStorage.getItem('selected_model');
 
+
+
     if (savedKey) {
+
       setApiKey(savedKey);
+
     } else {
-      // Thá»­ láº¥y key tá»« biáº¿n mÃ´i trÆ°á»ng (.env)
+
+      // Thử lấy key từ biến môi trưĐng (.env)
+
       const envKeys = (import.meta.env.VITE_GEMINI_API_KEYS || '').split(',').map((k: string) => k.trim()).filter((k: string) => k.length > 0);
+
       if (envKeys.length > 0) {
+
         const firstEnvKey = envKeys[0];
+
         setApiKey(firstEnvKey);
+
         localStorage.setItem('gemini_api_key', firstEnvKey);
-        console.log('ðŸ”‘ Tá»± Ä‘á»™ng sá»­ dá»¥ng API key tá»« biáº¿n mÃ´i trÆ°á»ng');
+
+        console.log('🔑 Tự động sử dụng API key từ biến môi trưĐng');
+
       } else {
-        // KhÃ´ng cÃ³ key nÃ o â†’ hiá»ƒn thá»‹ modal báº¯t buá»™c nháº­p
+
+        // Không có key nào → hiển thị modal bắt buộc nhập
+
         setShowApiModal(true);
+
       }
+
     }
+
+
 
     if (savedModel && FALLBACK_MODELS.includes(savedModel)) {
+
       setSelectedModel(savedModel);
+
     }
 
-    // Kiá»ƒm tra phiÃªn lÃ m viá»‡c Ä‘Ã£ lÆ°u
+
+
+    // Kiểm tra phiên làm việc đã lưu
+
     try {
+
       const savedSession = localStorage.getItem(SESSION_SAVE_KEY);
+
       if (savedSession) {
+
         const sessionData: SessionData = JSON.parse(savedSession);
-        // Chá»‰ hiá»‡n modal khÃ´i phá»¥c náº¿u phiÃªn cÃ³ tiáº¿n trÃ¬nh (step > INPUT_FORM)
+
+        // Chỉ hiện modal khôi phục nếu phiên có tiến trình (step > INPUT_FORM)
+
         if (sessionData.state && sessionData.state.step > GenerationStep.INPUT_FORM) {
+
           setPendingSessionData(sessionData);
+
           setShowRestoreModal(true);
+
         }
+
       }
+
     } catch (e) {
-      console.warn('KhÃ´ng thá»ƒ Ä‘á»c phiÃªn Ä‘Ã£ lÆ°u:', e);
+
+      console.warn('Không thể đĐc phiên đã lưu:', e);
+
       localStorage.removeItem(SESSION_SAVE_KEY);
+
     }
+
+
 
     setCheckingAuth(false);
+
   }, []);
+
+
 
   const handleSaveApiKey = (key: string, model: string) => {
+
     localStorage.setItem('gemini_api_key', key);
+
     localStorage.setItem('selected_model', model);
+
     setApiKey(key);
+
     setSelectedModel(model);
+
     setShowApiModal(false);
 
-    // ðŸ†• Náº¿u Ä‘ang cÃ³ lá»—i (vÃ­ dá»¥: háº¿t quota), clear error vÃ  reinitialize chat vá»›i key má»›i
+
+
+    // 🆕 Nếu đang có lỗi (ví dụ: hết quota), clear error và reinitialize chat với key mới
+
     if (state.error) {
+
       setState(prev => ({ ...prev, error: null }));
-      // Reinitialize chat session vá»›i key má»›i
+
+      // Reinitialize chat session với key mới
+
       initializeGeminiChat(key, model);
+
     }
+
   };
+
+
 
   const handleLogin = (username: string) => {
+
     localStorage.setItem('skkn_app_unlocked', 'true');
+
     localStorage.setItem('skkn_logged_user', username);
+
     setIsUnlocked(true);
+
   };
 
+
+
   const [userInfo, setUserInfo] = useState<UserInfo>({
+
     topic: '',
+
     subject: '',
+
     level: '',
+
     grade: '',
+
     school: '',
+
     location: '',
+
     facilities: '',
+
     textbook: '',
+
     researchSubjects: '',
+
     timeframe: '',
+
     applyAI: '',
+
     focus: '',
+
     referenceDocuments: '',
+
     skknTemplate: '',
+
     specialRequirements: '',
-    pageLimit: '', // Sá»‘ trang giá»›i háº¡n (Ä‘á»ƒ trá»‘ng = khÃ´ng giá»›i háº¡n)
-    includePracticalExamples: false, // ThÃªm vÃ­ dá»¥ thá»±c táº¿
-    includeStatistics: false, // Bá»• sung báº£ng biá»ƒu thá»‘ng kÃª
-    requirementsConfirmed: false, // ÄÃ£ xÃ¡c nháº­n yÃªu cáº§u
-    numSolutions: 3, // Máº·c Ä‘á»‹nh viáº¿t 3 giáº£i phÃ¡p
-    customTemplate: undefined // Cáº¥u trÃºc máº«u SKKN tÃ¹y chá»‰nh (Ä‘Ã£ trÃ­ch xuáº¥t)
+
+    pageLimit: '', // Số trang giới hạn (để trống = không giới hạn)
+
+    includePracticalExamples: false, // Thêm ví dụ thực tế
+
+    includeStatistics: false, // Bổ sung bảng biểu thống kê
+
+    requirementsConfirmed: false, // Đã xác nhận yêu cầu
+
+    numSolutions: 3, // Mặc định viết 3 giải pháp
+
+    customTemplate: undefined // Cấu trúc mẫu SKKN tùy chỉnh (đã trích xuất)
+
   });
 
-  // KhÃ´i phá»¥c referenceDocuments tá»« sessionStorage khi mount
+
+
+  // Khôi phục referenceDocuments từ sessionStorage khi mount
+
   useEffect(() => {
+
     try {
+
       const savedRefDocs = sessionStorage.getItem(SESSION_REF_DOCS_KEY);
+
       if (savedRefDocs && !userInfo.referenceDocuments) {
+
         setUserInfo(prev => ({ ...prev, referenceDocuments: savedRefDocs }));
-        console.log(`ðŸ“„ ÄÃ£ khÃ´i phá»¥c tÃ i liá»‡u tham kháº£o tá»« session (${(savedRefDocs.length / 1024).toFixed(1)}KB)`);
+
+        console.log(`📄 Đã khôi phục tài liệu tham khảo từ session (${(savedRefDocs.length / 1024).toFixed(1)}KB)`);
+
       }
+
     } catch (e) {
-      console.warn('KhÃ´ng thá»ƒ khÃ´i phá»¥c tÃ i liá»‡u tham kháº£o:', e);
+
+      console.warn('Không thể khôi phục tài liệu tham khảo:', e);
+
     }
+
   }, []);
 
-  // LÆ°u referenceDocuments vÃ o sessionStorage khi thay Ä‘á»•i
+
+
+  // Lưu referenceDocuments vào sessionStorage khi thay đổi
+
   useEffect(() => {
+
     try {
+
       if (userInfo.referenceDocuments) {
+
         sessionStorage.setItem(SESSION_REF_DOCS_KEY, userInfo.referenceDocuments);
+
       } else {
+
         sessionStorage.removeItem(SESSION_REF_DOCS_KEY);
+
       }
+
     } catch (e) {
-      console.warn('Text quÃ¡ lá»›n cho sessionStorage, bá» qua persistence:', e);
+
+      console.warn('Text quá lớn cho sessionStorage, bĐ qua persistence:', e);
+
     }
+
   }, [userInfo.referenceDocuments]);
 
+
+
   const [state, setState] = useState<GenerationState>({
+
     step: GenerationStep.INPUT_FORM,
+
     messages: [],
+
     fullDocument: '',
+
     isStreaming: false,
+
     error: null
+
   });
+
+
 
   const [outlineFeedback, setOutlineFeedback] = useState("");
 
-  // Phá»¥ lá»¥c riÃªng biá»‡t
+
+
+  // Phụ lục riêng biệt
+
   const [appendixDocument, setAppendixDocument] = useState('');
+
   const [isAppendixLoading, setIsAppendixLoading] = useState(false);
 
-  // State quáº£n lÃ½ tá»«ng giáº£i phÃ¡p riÃªng biá»‡t
+
+
+  // State quản lý từng giải pháp riêng biệt
+
   const [solutionsState, setSolutionsState] = useState<SolutionsState>({
+
     solution1: null,
+
     solution2: null,
+
     solution3: null,
+
     solution4: null,
+
     solution5: null,
+
   });
 
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+
+  // ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
   // CUSTOM TEMPLATE DYNAMIC STEPS LOGIC
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+  // ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
   const customTemplateData = useMemo(() => {
+
     try {
+
       return userInfo.customTemplate ? JSON.parse(userInfo.customTemplate) as SKKNTemplate : null;
+
     } catch { return null; }
+
   }, [userInfo.customTemplate]);
 
+
+
   const validCustomSections = useMemo(() => {
+
     if (!customTemplateData || !customTemplateData.sections) return [];
 
-    // Thuáº­t toÃ¡n gá»™p má»¥c an toÃ n tá»‘i Ä‘a: 
-    // - Láº¥y má»¥c Level 1 Náº¾U nÃ³ KHÃ”NG cÃ³ má»¥c con (thuá»™c má»i level cao hÆ¡n nÃ³).
-    // - Láº¥y má»¥c Level >= 2, nhÆ°ng sáº½ Bá»Ž QUA Táº¤T Cáº¢ má»¥c con bÃªn trong nÃ³ (Ä‘á»ƒ trÃ¡nh bÄƒm quÃ¡ nÃ¡t nhÆ° tiá»ƒu má»¥c a,b,c).
-    // Thuáº­t toÃ¡n nÃ y sáº½ cháº¡y Ä‘Ãºng ngay cáº£ khi AI Ä‘Ã¡nh nháº§m Level cá»§a II.1 thÃ nh Level 3 thay vÃ¬ Level 2.
+
+
+    // Thuật toán gộp mục an toàn tối đa: 
+
+    // - Lấy mục Level 1 NẾU nó KHÔNG có mục con (thuộc mĐi level cao hơn nó).
+
+    // - Lấy mục Level >= 2, nhưng sẽ BỎ QUA TẤT CẢ mục con bên trong nó (để tránh băm quá nát như tiểu mục a,b,c).
+
+    // Thuật toán này sẽ chạy đúng ngay cả khi AI đánh nhầm Level của II.1 thành Level 3 thay vì Level 2.
+
     const result = [];
+
     const sections = customTemplateData.sections;
 
+
+
     for (let i = 0; i < sections.length; i++) {
+
       const current = sections[i];
 
+
+
       let hasChild = false;
+
       if (i + 1 < sections.length && sections[i + 1].level > current.level) {
+
         hasChild = true;
+
       }
+
+
 
       if (current.level === 1) {
+
         if (!hasChild) {
+
           result.push(current);
+
         }
+
       } else {
-        // Push má»¥c hiá»‡n táº¡i (>= 2)
+
+        // Push mục hiện tại (>= 2)
+
         result.push(current);
 
-        // Bá» qua táº¥t cáº£ cÃ¡c má»¥c con cá»§a nÃ³
+
+
+        // BĐ qua tất cả các mục con của nó
+
         let nextIdx = i + 1;
+
         while (nextIdx < sections.length && sections[nextIdx].level > current.level) {
+
           nextIdx++;
+
         }
-        i = nextIdx - 1; // Sáº½ Ä‘Æ°á»£c i++ bá»Ÿi vÃ²ng láº·p for
+
+        i = nextIdx - 1; // Sẽ được i++ bởi vòng lặp for
+
       }
+
     }
 
+
+
     return result.length > 0 ? result : sections;
+
   }, [customTemplateData]);
+
+
 
   const isCustomFlow = validCustomSections.length > 0;
 
+
+
   const currentStepsInfo = useMemo(() => {
+
     if (!isCustomFlow) return STEPS_INFO;
 
+
+
     const info: Record<number, { label: string, description: string }> = {
-      0: { label: "ThÃ´ng tin", description: "Thiáº¿t láº­p thÃ´ng tin cÆ¡ báº£n" },
-      1: { label: "Láº­p DÃ n Ã", description: "XÃ¢y dá»±ng khung sÆ°á»n cho SKKN" },
+
+      0: { label: "Thông tin", description: "Thiết lập thông tin cơ bản" },
+
+      1: { label: "Lập Dàn Đ", description: "Xây dựng khung sưĐn cho SKKN" },
+
     };
 
+
+
     validCustomSections.forEach((section: any, idx: number) => {
+
       info[2 + idx] = {
+
         label: section.title.length > 25 ? section.title.substring(0, 25) + '...' : section.title,
-        description: `Viáº¿t má»¥c: ${section.title}`
+
+        description: `Viết mục: ${section.title}`
+
       };
+
     });
 
+
+
     const appendixStep = 2 + validCustomSections.length;
+
     const completedStep = appendixStep + 1;
-    info[appendixStep] = { label: "Táº¡o Phá»¥ lá»¥c", description: "TÃ i liá»‡u phá»¥ lá»¥c" };
-    info[completedStep] = { label: "HoÃ n táº¥t", description: "ÄÃ£ xong" };
+
+    info[appendixStep] = { label: "Tạo Phụ lục", description: "Tài liệu phụ lục" };
+
+    info[completedStep] = { label: "Hoàn tất", description: "Đã xong" };
+
+
 
     return info;
+
   }, [isCustomFlow, validCustomSections]);
+
+
 
   const COMPLETED_STEP_ID = isCustomFlow ? 2 + validCustomSections.length + 1 : GenerationStep.COMPLETED;
 
 
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-  // SESSION PERSISTENCE: Tá»± Ä‘á»™ng lÆ°u phiÃªn vÃ o localStorage
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
-  // HÃ m lÆ°u phiÃªn
+
+
+  // ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
+  // SESSION PERSISTENCE: Tự động lưu phiên vào localStorage
+
+  // ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
+
+
+  // Hàm lưu phiên
+
   const saveSession = useCallback(() => {
-    // Chá»‰ lÆ°u khi Ä‘Ã£ báº¯t Ä‘áº§u lÃ m viá»‡c (khÃ´ng lÆ°u khi Ä‘ang á»Ÿ form nháº­p)
+
+    // Chỉ lưu khi đã bắt đầu làm việc (không lưu khi đang ở form nhập)
+
     if (state.step <= GenerationStep.INPUT_FORM || state.isStreaming) return;
 
+
+
     try {
+
       const sessionData: SessionData = {
+
         userInfo: {
+
           ...userInfo,
-          referenceDocuments: '', // KhÃ´ng lÆ°u ref docs (quÃ¡ lá»›n, Ä‘Ã£ cÃ³ sessionStorage)
+
+          referenceDocuments: '', // Không lưu ref docs (quá lớn, đã có sessionStorage)
+
           hasReferenceDocuments: !!userInfo.referenceDocuments,
+
         } as any,
+
         state: {
+
           step: state.step,
+
           messages: state.messages,
+
           fullDocument: state.fullDocument,
+
         },
+
         solutionsState,
+
         appendixDocument,
+
         outlineFeedback,
+
         chatHistory: getChatHistory(),
+
         savedAt: new Date().toISOString(),
+
       };
 
+
+
       localStorage.setItem(SESSION_SAVE_KEY, JSON.stringify(sessionData));
+
       setSessionSavedAt(new Date().toLocaleTimeString('vi-VN'));
-      console.log('ðŸ’¾ ÄÃ£ lÆ°u phiÃªn lÃ m viá»‡c:', sessionData.state.step);
+
+      console.log('💾 Đã lưu phiên làm việc:', sessionData.state.step);
+
     } catch (e) {
-      console.warn('KhÃ´ng thá»ƒ lÆ°u phiÃªn (cÃ³ thá»ƒ do dá»¯ liá»‡u quÃ¡ lá»›n):', e);
+
+      console.warn('Không thể lưu phiên (có thể do dữ liệu quá lớn):', e);
+
     }
+
   }, [state.step, state.messages, state.fullDocument, state.isStreaming, userInfo, solutionsState, appendixDocument, outlineFeedback]);
 
-  // Tá»± Ä‘á»™ng lÆ°u khi state thay Ä‘á»•i (debounce 2 giÃ¢y)
+
+
+  // Tự động lưu khi state thay đổi (debounce 2 giây)
+
   useEffect(() => {
+
     if (state.step <= GenerationStep.INPUT_FORM || state.isStreaming) return;
 
+
+
     const timer = setTimeout(() => {
+
       saveSession();
+
     }, 2000);
 
+
+
     return () => clearTimeout(timer);
+
   }, [state.step, state.fullDocument, solutionsState, appendixDocument, saveSession]);
 
-  // HÃ m khÃ´i phá»¥c phiÃªn
+
+
+  // Hàm khôi phục phiên
+
   const restoreSession = useCallback((sessionData: SessionData) => {
+
     try {
-      // KhÃ´i phá»¥c userInfo (trá»« referenceDocuments)
+
+      // Khôi phục userInfo (trừ referenceDocuments)
+
       const { hasReferenceDocuments, ...savedUserInfo } = sessionData.userInfo as any;
+
       setUserInfo(prev => ({
+
         ...prev,
+
         ...savedUserInfo,
-        referenceDocuments: prev.referenceDocuments || '', // Giá»¯ ref docs tá»« sessionStorage
+
+        referenceDocuments: prev.referenceDocuments || '', // Giữ ref docs từ sessionStorage
+
       }));
 
-      // KhÃ´i phá»¥c GenerationState
+
+
+      // Khôi phục GenerationState
+
       setState({
+
         step: sessionData.state.step,
+
         messages: (sessionData.state.messages || []) as any,
+
         fullDocument: sessionData.state.fullDocument || '',
+
         isStreaming: false,
+
         error: null,
+
       });
 
+
+
       // Skip wizard upload step khi restore session
+
       setWizardStep(WizardStep.SETUP_INFO);
 
-      // KhÃ´i phá»¥c solutions
+
+
+      // Khôi phục solutions
+
       if (sessionData.solutionsState) {
+
         setSolutionsState(sessionData.solutionsState);
+
       }
 
-      // KhÃ´i phá»¥c phá»¥ lá»¥c
+
+
+      // Khôi phục phụ lục
+
       if (sessionData.appendixDocument) {
+
         setAppendixDocument(sessionData.appendixDocument);
+
       }
 
-      // KhÃ´i phá»¥c outline feedback
+
+
+      // Khôi phục outline feedback
+
       if (sessionData.outlineFeedback) {
+
         setOutlineFeedback(sessionData.outlineFeedback);
+
       }
 
-      // KhÃ´i phá»¥c chat history cho Gemini
+
+
+      // Khôi phục chat history cho Gemini
+
       if (sessionData.chatHistory && sessionData.chatHistory.length > 0) {
+
         setChatHistory(sessionData.chatHistory);
+
       }
 
-      // Initialize Gemini chat vá»›i API key
+
+
+      // Initialize Gemini chat với API key
+
       const savedKey = localStorage.getItem('gemini_api_key');
+
       const savedModel = localStorage.getItem('selected_model');
+
       if (savedKey) {
+
         initializeGeminiChat(savedKey, savedModel || undefined);
-        // KhÃ´i phá»¥c history SAU khi init (vÃ¬ init reset history)
+
+        // Khôi phục history SAU khi init (vì init reset history)
+
         if (sessionData.chatHistory && sessionData.chatHistory.length > 0) {
+
           setChatHistory(sessionData.chatHistory);
+
         }
+
       }
 
-      console.log('âœ… ÄÃ£ khÃ´i phá»¥c phiÃªn lÃ m viá»‡c thÃ nh cÃ´ng!');
+
+
+      console.log('✅ Đã khôi phục phiên làm việc thành công!');
+
     } catch (e) {
-      console.error('Lá»—i khÃ´i phá»¥c phiÃªn:', e);
-      setState(prev => ({ ...prev, error: 'KhÃ´ng thá»ƒ khÃ´i phá»¥c phiÃªn lÃ m viá»‡c. Vui lÃ²ng báº¯t Ä‘áº§u láº¡i.' }));
+
+      console.error('Lỗi khôi phục phiên:', e);
+
+      setState(prev => ({ ...prev, error: 'Không thể khôi phục phiên làm việc. Vui lòng bắt đầu lại.' }));
+
     }
+
   }, []);
 
-  // HÃ m xÃ³a phiÃªn Ä‘Ã£ lÆ°u
+
+
+  // Hàm xóa phiên đã lưu
+
   const clearSavedSession = useCallback(() => {
+
     localStorage.removeItem(SESSION_SAVE_KEY);
+
     setSessionSavedAt(null);
-    console.log('ðŸ—‘ ÄÃ£ xÃ³a phiÃªn lÃ m viá»‡c Ä‘Ã£ lÆ°u');
+
+    console.log('🗑 Đã xóa phiên làm việc đã lưu');
+
   }, []);
 
-  // State cho popup review giáº£i phÃ¡p
+
+
+  // State cho popup review giải pháp
+
   const [showSolutionReview, setShowSolutionReview] = useState(false);
+
   const [currentSolutionNumber, setCurrentSolutionNumber] = useState(0);
+
   const [currentSolutionContent, setCurrentSolutionContent] = useState('');
+
   const [isRevisingSolution, setIsRevisingSolution] = useState(false);
 
-  // Helper: TÃ­nh toÃ¡n phÃ¢n bá»• trang cho tá»«ng pháº§n SKKN
+
+
+  // Helper: Tính toán phân bổ trang cho từng phần SKKN
+
   const getPageAllocation = useCallback(() => {
+
     if (!userInfo.pageLimit || typeof userInfo.pageLimit !== 'number') return null;
 
+
+
     const pages = userInfo.pageLimit;
-    const wordsPerPage = 350; // 1 trang A4 â‰ˆ 350 tá»« (font 13pt, line spacing 1.5)
+
+    const wordsPerPage = 350; // 1 trang A4 ≈ 350 từ (font 13pt, line spacing 1.5)
+
     const charsPerPage = 2500;
+
     const numSolutions = userInfo.numSolutions || 3;
 
-    // PhÃ¢n bá»•: I&II (5%), III (5%), IV-GP (85%), V&VI (5%)
+
+
+    // Phân bổ: I&II (5%), III (5%), IV-GP (85%), V&VI (5%)
+
     const partI_II_pages = Math.max(1, Math.round(pages * 0.05));
+
     const partIII_pages = Math.max(1, Math.round(pages * 0.05));
+
     const partIV_pages = Math.max(numSolutions * 3, Math.round(pages * 0.85));
+
     const partV_VI_pages = Math.max(1, pages - partI_II_pages - partIII_pages - partIV_pages);
+
     const pagesPerSolution = Math.max(2, Math.floor(partIV_pages / numSolutions));
 
+
+
     return {
+
       totalPages: pages,
+
       wordsPerPage,
+
       charsPerPage,
+
       totalWords: pages * wordsPerPage,
+
       totalChars: pages * charsPerPage,
+
       numSolutions,
+
       partI_II: { pages: partI_II_pages, words: partI_II_pages * wordsPerPage, chars: partI_II_pages * charsPerPage },
+
       partIII: { pages: partIII_pages, words: partIII_pages * wordsPerPage, chars: partIII_pages * charsPerPage },
+
       partIV: { pages: partIV_pages, words: partIV_pages * wordsPerPage, chars: partIV_pages * charsPerPage },
+
       perSolution: { pages: pagesPerSolution, words: pagesPerSolution * wordsPerPage, chars: pagesPerSolution * charsPerPage },
+
       partV_VI: { pages: partV_VI_pages, words: partV_VI_pages * wordsPerPage, chars: partV_VI_pages * charsPerPage },
+
     };
+
   }, [userInfo.pageLimit, userInfo.numSolutions]);
 
-  // Helper: Táº¡o prompt giá»›i háº¡n sá»‘ tá»«/trang cho Má»˜T pháº§n cá»¥ thá»ƒ Ä‘ang viáº¿t
+
+
+  // Helper: Tạo prompt giới hạn số từ/trang cho MỘT phần cụ thể đang viết
+
   const getSectionPagePrompt = useCallback((sectionName: string, sectionKey: 'partI_II' | 'partIII' | 'perSolution' | 'partV_VI') => {
+
     const alloc = getPageAllocation();
+
     if (!alloc) return '';
 
+
+
     const section = alloc[sectionKey];
+
     return `
-ðŸš¨ GIá»šI Háº N Sá» TRANG CHO PHáº¦N NÃ€Y(Báº®T BUá»˜C):
-ðŸ“Œ ${sectionName}: PHáº¢I viáº¿t khoáº£ng ${section.pages} TRANG(â‰ˆ ${section.words.toLocaleString()} tá»« â‰ˆ ${section.chars.toLocaleString()} kÃ½ tá»±)
-âš ï¸ Trong tá»•ng ${alloc.totalPages} trang SKKN, pháº§n nÃ y chiáº¿m ${section.pages} trang.
-ðŸš« KHÃ”NG viáº¿t quÃ¡ ${Math.ceil(section.pages * 1.15)} trang vÃ  KHÃ”NG viáº¿t dÆ°á»›i ${Math.max(1, Math.floor(section.pages * 0.85))} trang.
-âœ… Viáº¿t CÃ” Äá»ŒNG, SÃšC TÃCH nhÆ°ng Äáº¦Y Äá»¦ Ná»˜I DUNG.Æ¯u tiÃªn báº£ng biá»ƒu Ä‘á»ƒ tiáº¿t kiá»‡m khÃ´ng gian.
+
+🚨 GIỚI HẠN SĐ TRANG CHO PHẦN NÀY(BẮT BUỘC):
+
+📌 ${sectionName}: PHẢI viết khoảng ${section.pages} TRANG(≈ ${section.words.toLocaleString()} từ ≈ ${section.chars.toLocaleString()} ký tự)
+
+⚠Đ Trong tổng ${alloc.totalPages} trang SKKN, phần này chiếm ${section.pages} trang.
+
+🚫 KHÔNG viết quá ${Math.ceil(section.pages * 1.15)} trang và KHÔNG viết dưới ${Math.max(1, Math.floor(section.pages * 0.85))} trang.
+
+✅ Viết CÔ ĐỌNG, SÚC TĐCH nhưng ĐẦY ĐỦ NỘI DUNG.Ưu tiên bảng biểu để tiết kiệm không gian.
+
 `;
+
   }, [getPageAllocation]);
 
-  // Helper function Ä‘á»ƒ táº¡o prompt nháº¯c láº¡i cÃ¡c yÃªu cáº§u Ä‘áº·c biá»‡t
+
+
+  // Helper function để tạo prompt nhắc lại các yêu cầu đặc biệt
+
   const getPageLimitPrompt = useCallback(() => {
-    // Kiá»ƒm tra xem ngÆ°á»i dÃ¹ng Ä‘Ã£ xÃ¡c nháº­n yÃªu cáº§u chÆ°a
+
+    // Kiểm tra xem ngưĐi dùng đã xác nhận yêu cầu chưa
+
     if (!userInfo.requirementsConfirmed) return '';
+
+
 
     const requirements: string[] = [];
 
-    // 1. Giá»›i háº¡n sá»‘ trang - TÃNH TOÃN CHI TIáº¾T
+
+
+    // 1. Giới hạn số trang - TĐNH TOĐN CHI TIẾT
+
     const alloc = getPageAllocation();
+
     if (alloc) {
+
       requirements.push(`
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-ðŸš¨ðŸš¨ðŸš¨ GIá»šI Háº N Sá» TRANG - Báº®T BUá»˜C TUYá»†T Äá»I ðŸš¨ðŸš¨ðŸš¨
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
 
-ðŸ“Œ Tá»”NG Sá» TRANG YÃŠU Cáº¦U: ${alloc.totalPages} TRANG (khÃ´ng tÃ­nh DÃ n Ã½ vÃ  Phá»¥ lá»¥c)
+ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
 
-ðŸ“ QUY Äá»”I CHUáº¨N (Font 13pt, Line spacing 1.5):
-â€¢ 1 trang A4 â‰ˆ ${alloc.wordsPerPage} tá»« â‰ˆ ${alloc.charsPerPage} kÃ½ tá»±
-â€¢ Tá»”NG CHO ${alloc.totalPages} TRANG: â‰ˆ ${alloc.totalWords.toLocaleString()} tá»« â‰ˆ ${alloc.totalChars.toLocaleString()} kÃ½ tá»±
+🚨🚨🚨 GIỚI HẠN SĐ TRANG - BẮT BUỘC TUYỆT ĐĐI 🚨🚨🚨
 
-ðŸ“Š PHÃ‚N Bá»” CHI TIáº¾T Tá»ªNG PHáº¦N:
-â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-â”‚ PHáº¦N                â”‚ Sá» TRANG  â”‚ Sá» Tá»ª         â”‚ Sá» KÃ Tá»°       â”‚
-â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¤
-â”‚ Pháº§n I & II         â”‚ ${alloc.partI_II.pages} trang    â”‚ ~${alloc.partI_II.words.toLocaleString()} tá»«      â”‚ ~${alloc.partI_II.chars.toLocaleString()} kÃ½ tá»±     â”‚
-â”‚ Pháº§n III            â”‚ ${alloc.partIII.pages} trang    â”‚ ~${alloc.partIII.words.toLocaleString()} tá»«      â”‚ ~${alloc.partIII.chars.toLocaleString()} kÃ½ tá»±     â”‚
-â”‚ Pháº§n IV(${alloc.numSolutions} GP)    â”‚ ${alloc.partIV.pages} trang   â”‚ ~${alloc.partIV.words.toLocaleString()} tá»«     â”‚ ~${alloc.partIV.chars.toLocaleString()} kÃ½ tá»±    â”‚
-â”‚  â†’ Má»—i giáº£i phÃ¡p   â”‚ ${alloc.perSolution.pages} trang    â”‚ ~${alloc.perSolution.words.toLocaleString()} tá»«      â”‚ ~${alloc.perSolution.chars.toLocaleString()} kÃ½ tá»±     â”‚
-â”‚ Pháº§n V & VI + KL    â”‚ ${alloc.partV_VI.pages} trang    â”‚ ~${alloc.partV_VI.words.toLocaleString()} tá»«      â”‚ ~${alloc.partV_VI.chars.toLocaleString()} kÃ½ tá»±     â”‚
-â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
 
-âš ï¸ QUY Táº®C KIá»‚M SOÃT Sá» TRANG NGHIÃŠM NGáº¶T:
-1. TRÆ¯á»šC KHI VIáº¾T: TÃ­nh toÃ¡n sá»‘ tá»« cáº§n viáº¿t cho pháº§n HIá»†N Táº I dá»±a trÃªn báº£ng phÃ¢n bá»•.
-2. TRONG KHI VIáº¾T: Äáº¿m sá»‘ tá»« Ä‘Ã£ viáº¿t, Dá»ªNG NGAY khi Ä‘áº¡t Ä‘á»§ sá»‘ tá»« phÃ¢n bá»•.
-3. SAU KHI VIáº¾T: Tá»± Ä‘Ã¡nh giÃ¡ sá»‘ tá»« Ä‘Ã£ viáº¿t so vá»›i phÃ¢n bá»•. Náº¿u vÆ°á»£t > 15% â†’ Cáº®T Bá»šT.
-4. Má»–I ÄOáº N VÄ‚N: Tá»‘i Ä‘a 3-4 cÃ¢u (â‰ˆ 60-80 tá»«)
-5. Má»–I Má»¤C NHá»Ž: Tá»‘i Ä‘a 5-7 Ä‘oáº¡n vÄƒn
-6. KHÃ”NG láº·p láº¡i Ã½, KHÃ”NG viáº¿t dÆ° thá»«a
-7. VÃ Dá»¤ MINH Há»ŒA: Chá»‰ 1-2 vÃ­ dá»¥ ngáº¯n gá»n / giáº£i phÃ¡p
-8. Báº¢NG BIá»‚U: GiÃºp tiáº¿t kiá»‡m khÃ´ng gian - Æ°u tiÃªn sá»­ dá»¥ng
 
-ðŸš«ðŸš«ðŸš« Cáº¢NH BÃO NGHIÃŠM NGáº¶T:
-- Náº¾U VÆ¯á»¢T QUÃ ${alloc.totalPages} TRANG (â‰ˆ ${alloc.totalWords.toLocaleString()} tá»«) â†’ HOÃ€N TOÃ€N KHÃ”NG CHáº¤P NHáº¬N ÄÆ¯á»¢C!
-- Náº¾U VIáº¾T THIáº¾U DÆ¯á»šI ${Math.max(1, Math.floor(alloc.totalPages * 0.8))} TRANG â†’ CÅ¨NG KHÃ”NG Äáº T YÃŠU Cáº¦U!
-- Sá» TRANG LÃ€ YÃŠU Cáº¦U Cá»T LÃ•I Cá»¦A NGÆ¯á»œI DÃ™NG, PHáº¢I TUÃ‚N THá»¦ 100%.
-âœ… Má»¤C TIÃŠU: Viáº¿t ÄÃšNG sá»‘ trang yÃªu cáº§u, CÃ” Äá»ŒNG, SÃšC TÃCH nhÆ°ng váº«n Äáº¦Y Äá»¦ Ná»˜I DUNG.`);
+
+📌 TỔNG SĐ TRANG YÊU CẦU: ${alloc.totalPages} TRANG (không tính Dàn ý và Phụ lục)
+
+
+
+Đ QUY ĐỔI CHUẨN (Font 13pt, Line spacing 1.5):
+
+• 1 trang A4 ≈ ${alloc.wordsPerPage} từ ≈ ${alloc.charsPerPage} ký tự
+
+• TỔNG CHO ${alloc.totalPages} TRANG: ≈ ${alloc.totalWords.toLocaleString()} từ ≈ ${alloc.totalChars.toLocaleString()} ký tự
+
+
+
+📊 PHÂN BỔ CHI TIẾT TỪNG PHẦN:
+
+┌──────────────────────────────────────────────────────────────────Đ
+
+│ PHẦN                │ SĐ TRANG  │ SĐ TỪ         │ SĐ KĐ TỰ       │
+
+├──────────────────────────────────────────────────────────────────┤
+
+│ Phần I & II         │ ${alloc.partI_II.pages} trang    │ ~${alloc.partI_II.words.toLocaleString()} từ      │ ~${alloc.partI_II.chars.toLocaleString()} ký tự     │
+
+│ Phần III            │ ${alloc.partIII.pages} trang    │ ~${alloc.partIII.words.toLocaleString()} từ      │ ~${alloc.partIII.chars.toLocaleString()} ký tự     │
+
+│ Phần IV(${alloc.numSolutions} GP)    │ ${alloc.partIV.pages} trang   │ ~${alloc.partIV.words.toLocaleString()} từ     │ ~${alloc.partIV.chars.toLocaleString()} ký tự    │
+
+│  → Mỗi giải pháp   │ ${alloc.perSolution.pages} trang    │ ~${alloc.perSolution.words.toLocaleString()} từ      │ ~${alloc.perSolution.chars.toLocaleString()} ký tự     │
+
+│ Phần V & VI + KL    │ ${alloc.partV_VI.pages} trang    │ ~${alloc.partV_VI.words.toLocaleString()} từ      │ ~${alloc.partV_VI.chars.toLocaleString()} ký tự     │
+
+└──────────────────────────────────────────────────────────────────┘
+
+
+
+⚠Đ QUY TẮC KIỂM SOĐT SĐ TRANG NGHIÊM NGẶT:
+
+1. TRƯỚC KHI VIẾT: Tính toán số từ cần viết cho phần HIỆN TẠI dựa trên bảng phân bổ.
+
+2. TRONG KHI VIẾT: Đếm số từ đã viết, DỪNG NGAY khi đạt đủ số từ phân bổ.
+
+3. SAU KHI VIẾT: Tự đánh giá số từ đã viết so với phân bổ. Nếu vượt > 15% → CẮT BỚT.
+
+4. MỖI ĐOẠN VĂN: Tối đa 3-4 câu (≈ 60-80 từ)
+
+5. MỖI MỤC NHỎ: Tối đa 5-7 đoạn văn
+
+6. KHÔNG lặp lại ý, KHÔNG viết dư thừa
+
+7. VĐ DỤ MINH HỌA: Chỉ 1-2 ví dụ ngắn gĐn / giải pháp
+
+8. BẢNG BIỂU: Giúp tiết kiệm không gian - ưu tiên sử dụng
+
+
+
+🚫🚫🚫 CẢNH BĐO NGHIÊM NGẶT:
+
+- NẾU VƯỢT QUĐ ${alloc.totalPages} TRANG (≈ ${alloc.totalWords.toLocaleString()} từ) → HOÀN TOÀN KHÔNG CHẤP NHẬN ĐƯỢC!
+
+- NẾU VIẾT THIẾU DƯỚI ${Math.max(1, Math.floor(alloc.totalPages * 0.8))} TRANG → CŨNG KHÔNG ĐẠT YÊU CẦU!
+
+- SĐ TRANG LÀ YÊU CẦU CĐT LÕI CỦA NGƯỜI DÙNG, PHẢI TUÂN THỦ 100%.
+
+✅ MỤC TIÊU: Viết ĐÚNG số trang yêu cầu, CÔ ĐỌNG, SÚC TĐCH nhưng vẫn ĐẦY ĐỦ NỘI DUNG.`);
+
     }
 
-    // 2. ThÃªm bÃ i toÃ¡n thá»±c táº¿, vÃ­ dá»¥ minh há»a
+
+
+    // 2. Thêm bài toán thực tế, ví dụ minh hĐa
+
     if (userInfo.includePracticalExamples) {
+
       requirements.push(`
-ðŸ“Š YÃŠU Cáº¦U THÃŠM BÃ€I TOÃN THá»°C Táº¾, VÃ Dá»¤ MINH Há»ŒA:
-- Má»—i giáº£i phÃ¡p PHáº¢I cÃ³ Ã­t nháº¥t 2 - 3 vÃ­ dá»¥ thá»±c táº¿ cá»¥ thá»ƒ
-  - BÃ i toÃ¡n thá»±c táº¿ pháº£i gáº¯n vá»›i Ä‘á»i sá»‘ng, cÃ´ng viá»‡c, nghá» nghiá»‡p
-    - VÃ­ dá»¥ minh há»a pháº£i chi tiáº¿t, cÃ³ thá»ƒ Ã¡p dá»¥ng ngay
-      - Æ¯u tiÃªn cÃ¡c vÃ­ dá»¥ tá»« SGK ${userInfo.textbook || "hiá»‡n hÃ nh"} `);
+
+📊 YÊU CẦU THÊM BÀI TOĐN THỰC TẾ, VĐ DỤ MINH HỌA:
+
+- Mỗi giải pháp PHẢI có ít nhất 2 - 3 ví dụ thực tế cụ thể
+
+  - Bài toán thực tế phải gắn với đĐi sống, công việc, nghĐ nghiệp
+
+    - Ví dụ minh hĐa phải chi tiết, có thể áp dụng ngay
+
+      - Ưu tiên các ví dụ từ SGK ${userInfo.textbook || "hiện hành"} `);
+
     }
 
-    // 3. Bá»• sung báº£ng biá»ƒu, sá»‘ liá»‡u thá»‘ng kÃª
+
+
+    // 3. Bổ sung bảng biểu, số liệu thống kê
+
     if (userInfo.includeStatistics) {
+
       requirements.push(`
-ðŸ“ˆ YÃŠU Cáº¦U Bá»” SUNG Báº¢NG BIá»‚U, Sá» LIá»†U THá»NG KÃŠ:
-- Má»—i pháº§n quan trá»ng PHáº¢I cÃ³ báº£ng biá»ƒu hoáº·c sá»‘ liá»‡u minh há»a
-  - Sá»­ dá»¥ng sá»‘ liá»‡u láº» tá»± nhiÃªn(42.3 %, 67.8 %) thay vÃ¬ sá»‘ trÃ²n
-    - Báº£ng sá»‘ liá»‡u pháº£i rÃµ rÃ ng, format Markdown chuáº©n
-      - CÃ³ biá»ƒu Ä‘á»“ gá»£i Ã½ khi cáº§n thiáº¿t
-        - Sá»‘ liá»‡u pháº£i logic vÃ  nháº¥t quÃ¡n trong toÃ n bÃ i`);
+
+📈 YÊU CẦU BỔ SUNG BẢNG BIỂU, SĐ LIỆU THĐNG KÊ:
+
+- Mỗi phần quan trĐng PHẢI có bảng biểu hoặc số liệu minh hĐa
+
+  - Sử dụng số liệu lẻ tự nhiên(42.3 %, 67.8 %) thay vì số tròn
+
+    - Bảng số liệu phải rõ ràng, format Markdown chuẩn
+
+      - Có biểu đồ gợi ý khi cần thiết
+
+        - Số liệu phải logic và nhất quán trong toàn bài`);
+
     }
 
-    // 4. YÃªu cáº§u bá»• sung khÃ¡c
+
+
+    // 4. Yêu cầu bổ sung khác
+
     if (userInfo.specialRequirements && userInfo.specialRequirements.trim()) {
+
       requirements.push(`
-âœï¸ YÃŠU Cáº¦U Bá»” SUNG Tá»ª NGÆ¯á»œI DÃ™NG:
+
+ĐĐ YÊU CẦU BỔ SUNG TỪ NGƯỜI DÙNG:
+
 ${userInfo.specialRequirements}
-HÃ£y Ã¡p dá»¥ng CHÃNH XÃC cÃ¡c yÃªu cáº§u trÃªn vÃ o pháº§n Ä‘ang viáº¿t!`);
+
+Hãy áp dụng CHĐNH XĐC các yêu cầu trên vào phần đang viết!`);
+
     }
+
+
 
     if (requirements.length === 0) return '';
 
+
+
     return `
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-âš ï¸ CÃC YÃŠU Cáº¦U Äáº¶C BIá»†T ÄÃƒ XÃC NHáº¬N(Báº®T BUá»˜C TUÃ‚N THá»¦ NGHIÃŠM NGáº¶T):
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+
+ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
+⚠Đ CĐC YÊU CẦU ĐẶC BIỆT ĐÃ XĐC NHẬN(BẮT BUỘC TUÂN THỦ NGHIÊM NGẶT):
+
+ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
 ${requirements.join('\n')}
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+
+ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
 `;
+
   }, [userInfo.requirementsConfirmed, userInfo.pageLimit, userInfo.includePracticalExamples, userInfo.includeStatistics, userInfo.specialRequirements, userInfo.textbook, userInfo.numSolutions, getPageAllocation]);
 
-  // Helper function Ä‘á»ƒ táº¡o prompt cáº¥u trÃºc tá»« máº«u SKKN Ä‘Ã£ trÃ­ch xuáº¥t
+
+
+  // Helper function để tạo prompt cấu trúc từ mẫu SKKN đã trích xuất
+
   const getCustomTemplatePrompt = useCallback(() => {
+
     if (!userInfo.customTemplate) return null;
 
+
+
     try {
+
       const template: SKKNTemplate = JSON.parse(userInfo.customTemplate);
+
       if (!template.sections || template.sections.length === 0) return null;
 
-      // Táº¡o chuá»—i hiá»ƒn thá»‹ cáº¥u trÃºc
+
+
+      // Tạo chuỗi hiển thị cấu trúc
+
       const structureText = template.sections.map(s => {
+
         const indent = '  '.repeat(s.level - 1);
-        const prefix = s.level === 1 ? 'ðŸ“Œ' : s.level === 2 ? 'â€¢' : 'â—‹';
+
+        const prefix = s.level === 1 ? '📌' : s.level === 2 ? '•' : '○';
+
         return `${indent}${prefix} ${s.id}. ${s.title} `;
+
       }).join('\n');
 
+
+
       return `
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-ðŸš¨ðŸš¨ðŸš¨ Cáº¤U TRÃšC MáºªU SKKN Tá»ª ${template.name || 'Sá»Ÿ/PhÃ²ng GD'} (Báº®T BUá»˜C TUYá»†T Äá»I) ðŸš¨ðŸš¨ðŸš¨
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-âš ï¸ Cáº¢NH BÃO: ÄÃ¢y lÃ  Cáº¤U TRÃšC DUY NHáº¤T Ä‘Æ°á»£c phÃ©p sá»­ dá»¥ng.
-ðŸš« TUYá»†T Äá»I KHÃ”NG sá»­ dá»¥ng cáº¥u trÃºc SKKN máº·c Ä‘á»‹nh / chuáº©n.
-âœ… Báº®T BUá»˜C Táº O DÃ€N Ã VÃ€ Ná»˜I DUNG THEO ÄÃšNG Cáº¤U TRÃšC NÃ€Y:
+
+ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
+🚨🚨🚨 CẤU TRÚC MẪU SKKN TỪ ${template.name || 'Sở/Phòng GD'} (BẮT BUỘC TUYỆT ĐĐI) 🚨🚨🚨
+
+ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
+⚠Đ CẢNH BĐO: Đây là CẤU TRÚC DUY NHẤT được phép sử dụng.
+
+🚫 TUYỆT ĐĐI KHÔNG sử dụng cấu trúc SKKN mặc định / chuẩn.
+
+✅ BẮT BUỘC TẠO DÀN Đ VÀ NỘI DUNG THEO ĐÚNG CẤU TRÚC NÀY:
+
+
 
 ${structureText}
 
-QUY Táº®C Báº®T BUá»˜C:
-1. Táº O DÃ€N Ã theo ÄÃšNG thá»© tá»± vÃ  tÃªn cÃ¡c pháº§n / má»¥c nhÆ° trÃªn
-2. KHÃ”NG thay Ä‘á»•i tÃªn cÃ¡c pháº§n lá»›n(level 1)
-3. CÃC Má»¤C CON cÃ³ thá»ƒ Ä‘iá»u chá»‰nh ná»™i dung cho phÃ¹ há»£p Ä‘á» tÃ i nhÆ°ng PHáº¢I giá»¯ nguyÃªn cáº¥u trÃºc
-4. Äiá»n ná»™i dung phÃ¹ há»£p vá»›i Ä‘á» tÃ i vÃ o Tá»ªNG Má»¤C
-5. KHÃ”NG sá»­ dá»¥ng cáº¥u trÃºc "Pháº§n I, II, III, IV, V, VI" máº·c Ä‘á»‹nh náº¿u máº«u cÃ³ cáº¥u trÃºc khÃ¡c
-6. Sá»‘ lÆ°á»£ng giáº£i phÃ¡p, tÃªn cÃ¡c pháº§n, thá»© tá»± trÃ¬nh bÃ y PHáº¢I theo máº«u nÃ y
 
-[Háº¾T Cáº¤U TRÃšC MáºªU - Má»ŒI Ná»˜I DUNG PHáº¢I TUÃ‚N THá»¦ Cáº¤U TRÃšC TRÃŠN]
+
+QUY TẮC BẮT BUỘC:
+
+1. TẠO DÀN Đ theo ĐÚNG thứ tự và tên các phần / mục như trên
+
+2. KHÔNG thay đổi tên các phần lớn(level 1)
+
+3. CĐC MỤC CON có thể điĐu chỉnh nội dung cho phù hợp đĐ tài nhưng PHẢI giữ nguyên cấu trúc
+
+4. ĐiĐn nội dung phù hợp với đĐ tài vào TỪNG MỤC
+
+5. KHÔNG sử dụng cấu trúc "Phần I, II, III, IV, V, VI" mặc định nếu mẫu có cấu trúc khác
+
+6. Số lượng giải pháp, tên các phần, thứ tự trình bày PHẢI theo mẫu này
+
+
+
+[HẾT CẤU TRÚC MẪU - MỌI NỘI DUNG PHẢI TUÂN THỦ CẤU TRÚC TRÊN]
+
 `;
+
     } catch (e) {
-      console.error('Lá»—i parse customTemplate:', e);
+
+      console.error('Lỗi parse customTemplate:', e);
+
       return null;
+
     }
+
   }, [userInfo.customTemplate]);
 
+
+
   // Handle Input Changes
+
   const handleUserChange = (field: keyof UserInfo, value: string) => {
+
     setUserInfo(prev => {
+
       const updated = { ...prev, [field]: value };
-      // Reset grade khi Ä‘á»•i cáº¥p há»c giá»¯a báº­c phá»• thÃ´ng vÃ  báº­c cao
+
+      // Reset grade khi đổi cấp hĐc giữa bậc phổ thông và bậc cao
+
       if (field === 'level') {
+
         const wasHigherEd = HIGHER_ED_LEVELS.includes(prev.level);
+
         const isHigherEd = HIGHER_ED_LEVELS.includes(value as string);
+
         if (wasHigherEd !== isHigherEd) {
+
           updated.grade = '';
+
         }
+
       }
+
       return updated;
+
     });
+
   };
+
+
 
   // Handle Manual Document Edit
+
   const handleDocumentUpdate = (newContent: string) => {
+
     setState(prev => ({ ...prev, fullDocument: newContent }));
+
   };
+
+
 
   // Handle Manual Outline Submission (Skip Generation)
+
   const handleManualOutlineSubmit = (content: string) => {
+
     if (!apiKey) {
+
       setShowApiModal(true);
+
       return;
+
     }
+
+
 
     // Initialize chat session silently so it's ready for next steps
+
     initializeGeminiChat(apiKey, selectedModel);
 
+
+
     setState(prev => ({
+
       ...prev,
+
       fullDocument: content,
+
       step: GenerationStep.OUTLINE, // Go to Outline step so user can Review/Confirm
+
       isStreaming: false,
+
       error: null
+
     }));
+
   };
 
+
+
   // Start the Generation Process
+
   const startGeneration = async () => {
+
     if (!apiKey) {
+
       setShowApiModal(true);
+
       return;
+
     }
 
+
+
     try {
+
       setState(prev => ({ ...prev, step: GenerationStep.OUTLINE, isStreaming: true, error: null }));
+
+
 
       initializeGeminiChat(apiKey, selectedModel);
 
+
+
       const isHigherEd = HIGHER_ED_LEVELS.includes(userInfo.level);
-      const learnerTerm = isHigherEd ? 'sinh viÃªn' : 'há»c sinh';
-      const teacherTerm = isHigherEd ? 'giáº£ng viÃªn' : 'giÃ¡o viÃªn';
-      const schoolTerm = isHigherEd ? 'trÆ°á»ng/há»c viá»‡n' : 'trÆ°á»ng';
-      const textbookTerm = isHigherEd ? 'giÃ¡o trÃ¬nh' : 'SGK';
+
+      const learnerTerm = isHigherEd ? 'sinh viên' : 'hĐc sinh';
+
+      const teacherTerm = isHigherEd ? 'giảng viên' : 'giáo viên';
+
+      const schoolTerm = isHigherEd ? 'trưĐng/hĐc viện' : 'trưĐng';
+
+      const textbookTerm = isHigherEd ? 'giáo trình' : 'SGK';
+
+
 
       const initMessage = `
-Báº¡n lÃ  chuyÃªn gia giÃ¡o dá»¥c cáº¥p quá»‘c gia, cÃ³ 20 + nÄƒm kinh nghiá»‡m viáº¿t, tháº©m Ä‘á»‹nh vÃ  cháº¥m Ä‘iá»ƒm SÃ¡ng kiáº¿n Kinh nghiá»‡m(SKKN) Ä‘áº¡t giáº£i cáº¥p Bá»™, cáº¥p tá»‰nh táº¡i Viá»‡t Nam.
+
+Bạn là chuyên gia giáo dục cấp quốc gia, có 20 + năm kinh nghiệm viết, thẩm định và chấm điểm Sáng kiến Kinh nghiệm(SKKN) đạt giải cấp Bộ, cấp tỉnh tại Việt Nam.
+
   ${isHigherEd ? `
-âš ï¸ LÆ¯U Ã QUAN TRá»ŒNG: ÄÃ¢y lÃ  SKKN dÃ nh cho Báº¬C ${userInfo.level.toUpperCase()} - KHÃ”NG PHáº¢I PHá»” THÃ”NG.
-Pháº£i sá»­ dá»¥ng thuáº­t ngá»¯ phÃ¹ há»£p: "sinh viÃªn" thay "há»c sinh", "giáº£ng viÃªn" thay "giÃ¡o viÃªn", "giÃ¡o trÃ¬nh" thay "SGK", v.v.
+
+⚠Đ LƯU Đ QUAN TRỌNG: Đây là SKKN dành cho BẬC ${userInfo.level.toUpperCase()} - KHÔNG PHẢI PHỔ THÔNG.
+
+Phải sử dụng thuật ngữ phù hợp: "sinh viên" thay "hĐc sinh", "giảng viên" thay "giáo viên", "giáo trình" thay "SGK", v.v.
+
 ` : ''
+
         }
-NHIá»†M Vá»¤ Cá»¦A Báº N:
-Láº­p DÃ€N Ã CHI TIáº¾T cho má»™t Ä‘á» tÃ i SKKN dá»±a trÃªn thÃ´ng tin tÃ´i cung cáº¥p.DÃ n Ã½ pháº£i Ä‘áº§y Ä‘á»§, cá»¥ thá»ƒ, cÃ³ Ä‘á»™ sÃ¢u vÃ  Ä‘áº£m báº£o 4 tiÃªu chÃ­: TÃ­nh Má»šI, TÃ­nh KHOA Há»ŒC, TÃ­nh KHáº¢ THI, TÃ­nh HIá»†U QUáº¢.
 
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-ðŸ† 10 NGUYÃŠN Táº®C VÃ€NG CHá»NG Äáº O VÄ‚N & NÃ‚NG Táº¦M CHáº¤T LÆ¯á»¢NG(Báº®T BUá»˜C TUÃ‚N THá»¦ NGHIÃŠM NGáº¶T):
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+NHIỆM VỤ CỦA BẠN:
 
-âš ï¸ Cáº¢NH BÃO: Báº¡n PHáº¢I tuÃ¢n thá»§ 10 nguyÃªn táº¯c sau Ä‘á»ƒ SKKN cÃ³ tÃ­nh "CON NGÆ¯á»œI", giá»ng Ä‘iá»‡u tá»± nhiÃªn nhÆ° má»™t giÃ¡o viÃªn thá»±c sá»± Ä‘ang viáº¿t sÃ¡ng kiáº¿n cá»§a chÃ­nh há» - lÃ  tÃ¢m huyáº¿t vÃ  sÃ¡ng táº¡o cá»§a há».
+Lập DÀN Đ CHI TIẾT cho một đĐ tài SKKN dựa trên thông tin tôi cung cấp.Dàn ý phải đầy đủ, cụ thể, có độ sâu và đảm bảo 4 tiêu chí: Tính MỚI, Tính KHOA HỌC, Tính KHẢ THI, Tính HIỆU QUẢ.
 
-1ï¸âƒ£ KHÃ”NG SAO CHÃ‰P TRá»°C TIáº¾P(Zero Copy - Paste):
-   âŒ SAI: Copy nguyÃªn vÄƒn Ä‘á»‹nh nghÄ©a tá»« Wikipedia, sÃ¡ch giÃ¡o khoa.
-   âœ… ÄÃšNG: Äá»c hiá»ƒu Ã½ tÆ°á»Ÿng â†’ TÃ³m táº¯t theo tÆ° duy riÃªng â†’ Viáº¿t báº±ng ngÃ´n ngá»¯ vÃ  vÄƒn phong riÃªng biá»‡t.
 
-2ï¸âƒ£ TÆ¯ DUY VIáº¾T HOÃ€N TOÃ€N Má»šI(Unique Thinking):
-   âŒ SAI: "GiÃ¡o dá»¥c lÃ  quá»‘c sÃ¡ch hÃ ng Ä‘áº§u", "Tháº§y cÃ´ lÃ  ngÆ°á»i lÃ¡i Ä‘Ã²"(sÃ¡o rá»—ng).
-   âœ… ÄÃšNG: Viáº¿t cÃ¢u cÃ³ chiá»u sÃ¢u, pháº£n Ã¡nh tÆ° duy cÃ¡ nhÃ¢n cá»§a ngÆ°á»i viáº¿t.
 
-3ï¸âƒ£ Xá»¬ LÃ LÃ THUYáº¾T GIÃO Dá»¤C:
-   CÃ´ng thá»©c: [Diá»…n giáº£i lÃ½ thuyáº¿t theo cÃ¡ch má»›i] + [Ã nghÄ©a vá»›i giÃ¡o dá»¥c VN hiá»‡n táº¡i] + [LiÃªn há»‡ trá»±c tiáº¿p Ä‘á» tÃ i táº¡i trÆ°á»ng cá»¥ thá»ƒ].
+ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
 
-4ï¸âƒ£ Xá»¬ LÃ VÄ‚N Báº¢N PHÃP LUáº¬T:
-   KHÃ”NG trÃ­ch dáº«n nguyÃªn vÄƒn cÃ¡c Äiá»u, Khoáº£n.HÃ£y TÃ“M Táº®T Ná»˜I HÃ€M theo cÃ¡ch riÃªng.
+Đ 10 NGUYÊN TẮC VÀNG CHĐNG ĐẠO VĂN & NÂNG TẦM CHẤT LƯỢNG(BẮT BUỘC TUÂN THỦ NGHIÊM NGẶT):
 
-5ï¸âƒ£ Táº O Sá» LIá»†U Äá»˜C Báº¢N & Há»¢P LÃ:
-- DÃ¹ng sá»‘ láº» tá»± nhiÃªn(42.3 %, 68.7 %) thay vÃ¬ sá»‘ trÃ²n(40 %, 50 %).
-   - Tá»•ng tá»· lá»‡ pháº£i = 100 %.Káº¿t quáº£ "Sau" tá»‘t hÆ¡n "TrÆ°á»›c" nhÆ°ng khÃ´ng tuyá»‡t Ä‘á»‘i hÃ³a.
+ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
 
-6ï¸âƒ£ GIáº¢I PHÃP Cá»¤ THá»‚ HÃ“A:
-   âŒ TrÃ¡nh: "Äá»•i má»›i phÆ°Æ¡ng phÃ¡p dáº¡y há»c"(chung chung).
-   âœ… Pháº£i: Äáº·t tÃªn giáº£i phÃ¡p áº¥n tÆ°á»£ng vÃ  cá»¥ thá»ƒ(VD: "Thiáº¿t káº¿ chuá»—i hoáº¡t Ä‘á»™ng theo mÃ´ hÃ¬nh 5E káº¿t há»£p Padlet").
 
-7ï¸âƒ£ Ká»¸ THUáº¬T PARAPHRASE 5 Cáº¤P Äá»˜:
-1. Thay Ä‘á»•i tá»« vá»±ng(Há»c sinh â†’ NgÆ°á»i há»c, GiÃ¡o viÃªn â†’ NhÃ  giÃ¡o dá»¥c).
-   2. Äá»•i cáº¥u trÃºc cÃ¢u chá»§ Ä‘á»™ng â†” bá»‹ Ä‘á»™ng.
-   3. Káº¿t há»£p 2 - 3 cÃ¢u Ä‘Æ¡n thÃ nh cÃ¢u phá»©c.
-   4. ThÃªm tráº¡ng tá»« / tÃ­nh tá»« biá»ƒu cáº£m.
-   5. Äáº£o ngá»¯ nháº¥n máº¡nh.
 
-8ï¸âƒ£ Cáº¤U TRÃšC CÃ‚U PHá»¨C Há»¢P:
-   Æ¯u tiÃªn cÃ¢u ghÃ©p, cÃ¢u phá»©c cÃ³ nhiá»u má»‡nh Ä‘á» Ä‘á»ƒ thá»ƒ hiá»‡n tÆ° duy logic cháº·t cháº½.
+⚠Đ CẢNH BĐO: Bạn PHẢI tuân thủ 10 nguyên tắc sau để SKKN có tính "CON NGƯỜI", giĐng điệu tự nhiên như một giáo viên thực sự đang viết sáng kiến của chính hĐ - là tâm huyết và sáng tạo của hĐ.
 
-9ï¸âƒ£ NGÃ”N NGá»® CHUYÃŠN NGÃ€NH:
-   Sá»­ dá»¥ng tá»« khÃ³a "Ä‘áº¯t" giÃ¡: Hiá»‡n thá»±c hÃ³a, Tá»‘i Æ°u hÃ³a, CÃ¡ nhÃ¢n hÃ³a, TÃ­ch há»£p liÃªn mÃ´n, Pháº©m cháº¥t cá»‘t lÃµi, NÄƒng lá»±c Ä‘áº·c thÃ¹, TÆ° duy Ä‘a chiá»u, Chuyá»ƒn Ä‘á»•i sá»‘, Há»‡ sinh thÃ¡i há»c táº­p...
 
-ðŸ”Ÿ Tá»° KIá»‚M TRA:
-   Trong quÃ¡ trÃ¬nh viáº¿t, liÃªn tá»¥c tá»± há»i: "Äoáº¡n nÃ y cÃ³ quÃ¡ giá»‘ng vÄƒn máº«u khÃ´ng?".Náº¿u cÃ³ â†’ Viáº¿t láº¡i ngay.
 
-ðŸ’¡ GIá»ŒNG ÄIá»†U YÃŠU Cáº¦U:
-- Viáº¿t nhÆ° má»™t GIÃO VIÃŠN THá»°C Sá»° Ä‘ang chia sáº» sÃ¡ng kiáº¿n cá»§a chÃ­nh mÃ¬nh.
-- Thá»ƒ hiá»‡n TÃ‚M HUYáº¾T, TRÄ‚N TRá»ž vá»›i nghá» vÃ  vá»›i há»c sinh.
-- DÃ¹ng ngÃ´n ngá»¯ Tá»° NHIÃŠN, CHÃ‚N THÃ€NH, khÃ´ng mÃ¡y mÃ³c hay khuÃ´n máº«u.
-- Xen káº½ nhá»¯ng suy nghÄ© cÃ¡ nhÃ¢n, nhá»¯ng quan sÃ¡t thá»±c táº¿ tá»« lá»›p há»c.
+1Đ⃣ KHÔNG SAO CHÉP TRỰC TIẾP(Zero Copy - Paste):
 
-Báº®T Äáº¦U pháº£n há»“i báº±ng MENU NAVIGATION tráº¡ng thÃ¡i BÆ°á»›c 2(Láº­p DÃ n Ã - Äang thá»±c hiá»‡n).
+   Đ SAI: Copy nguyên văn định nghĩa từ Wikipedia, sách giáo khoa.
+
+   ✅ ĐÚNG: ĐĐc hiểu ý tưởng → Tóm tắt theo tư duy riêng → Viết bằng ngôn ngữ và văn phong riêng biệt.
+
+
+
+2Đ⃣ TƯ DUY VIẾT HOÀN TOÀN MỚI(Unique Thinking):
+
+   Đ SAI: "Giáo dục là quốc sách hàng đầu", "Thầy cô là ngưĐi lái đò"(sáo rỗng).
+
+   ✅ ĐÚNG: Viết câu có chiĐu sâu, phản ánh tư duy cá nhân của ngưĐi viết.
+
+
+
+3Đ⃣ XỬ LĐ LĐ THUYẾT GIĐO DỤC:
+
+   Công thức: [Diễn giải lý thuyết theo cách mới] + [Đ nghĩa với giáo dục VN hiện tại] + [Liên hệ trực tiếp đĐ tài tại trưĐng cụ thể].
+
+
+
+4Đ⃣ XỬ LĐ VĂN BẢN PHĐP LUẬT:
+
+   KHÔNG trích dẫn nguyên văn các ĐiĐu, Khoản.Hãy TÓM TẮT NỘI HÀM theo cách riêng.
+
+
+
+5Đ⃣ TẠO SĐ LIỆU ĐỘC BẢN & HỢP LĐ:
+
+- Dùng số lẻ tự nhiên(42.3 %, 68.7 %) thay vì số tròn(40 %, 50 %).
+
+   - Tổng tỷ lệ phải = 100 %.Kết quả "Sau" tốt hơn "Trước" nhưng không tuyệt đối hóa.
+
+
+
+6Đ⃣ GIẢI PHĐP CỤ THỂ HÓA:
+
+   Đ Tránh: "Đổi mới phương pháp dạy hĐc"(chung chung).
+
+   ✅ Phải: Đặt tên giải pháp ấn tượng và cụ thể(VD: "Thiết kế chuỗi hoạt động theo mô hình 5E kết hợp Padlet").
+
+
+
+7Đ⃣ KỸ THUẬT PARAPHRASE 5 CẤP ĐỘ:
+
+1. Thay đổi từ vựng(HĐc sinh → NgưĐi hĐc, Giáo viên → Nhà giáo dục).
+
+   2. Đổi cấu trúc câu chủ động ↔ bị động.
+
+   3. Kết hợp 2 - 3 câu đơn thành câu phức.
+
+   4. Thêm trạng từ / tính từ biểu cảm.
+
+   5. Đảo ngữ nhấn mạnh.
+
+
+
+8Đ⃣ CẤU TRÚC CÂU PHỨC HỢP:
+
+   Ưu tiên câu ghép, câu phức có nhiĐu mệnh đĐ để thể hiện tư duy logic chặt chẽ.
+
+
+
+9Đ⃣ NGÔN NGỮ CHUYÊN NGÀNH:
+
+   Sử dụng từ khóa "đắt" giá: Hiện thực hóa, Tối ưu hóa, Cá nhân hóa, Tích hợp liên môn, Phẩm chất cốt lõi, Năng lực đặc thù, Tư duy đa chiĐu, Chuyển đổi số, Hệ sinh thái hĐc tập...
+
+
+
+🔟 TỰ KIỂM TRA:
+
+   Trong quá trình viết, liên tục tự hĐi: "Đoạn này có quá giống văn mẫu không?".Nếu có → Viết lại ngay.
+
+
+
+💡 GIỌNG ĐIỆU YÊU CẦU:
+
+- Viết như một GIĐO VIÊN THỰC SỰ đang chia sẻ sáng kiến của chính mình.
+
+- Thể hiện TÂM HUYẾT, TRĂN TRỞ với nghĐ và với hĐc sinh.
+
+- Dùng ngôn ngữ TỰ NHIÊN, CHÂN THÀNH, không máy móc hay khuôn mẫu.
+
+- Xen kẽ những suy nghĩ cá nhân, những quan sát thực tế từ lớp hĐc.
+
+
+
+BẮT ĐẦU phản hồi bằng MENU NAVIGATION trạng thái Bước 2(Lập Dàn Đ - Đang thực hiện).
+
+
 
   ${isHigherEd ? HIGHER_ED_SYSTEM_INSTRUCTION : ''}
 
+
+
 ${OUTLINE_GUIDE}
 
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-THÃ”NG TIN Äá»€ TÃ€I:
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
 
-â€¢ TÃªn Ä‘á» tÃ i: ${userInfo.topic}
-â€¢ MÃ´n há»c / LÄ©nh vá»±c: ${userInfo.subject}${(() => {
+
+ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
+THÔNG TIN ĐỀ TÀI:
+
+ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
+
+
+• Tên đĐ tài: ${userInfo.topic}
+
+• Môn hĐc / Lĩnh vực: ${userInfo.subject}${(() => {
+
           const info = getSubjectInfo(userInfo.subject); return info ? `
-  â†’ NhÃ³m: ${info.group}
-  â†’ Äáº·c trÆ°ng: ${info.description}
-  â†’ HÃ£y viáº¿t ná»™i dung SKKN bÃ¡m sÃ¡t Ä‘áº·c thÃ¹ lÄ©nh vá»±c "${info.name}" thuá»™c nhÃ³m "${info.group}"` : '';
-        })()
-        }
-â€¢ Cáº¥p há»c: ${userInfo.level}
-â€¢ Khá»‘i lá»›p / Äá»‘i tÆ°á»£ng: ${userInfo.grade}
-â€¢ TÃªn ${schoolTerm}: ${userInfo.school}
-â€¢ Äá»‹a Ä‘iá»ƒm: ${userInfo.location}
-â€¢ Äiá»u kiá»‡n CSVC: ${userInfo.facilities}
-â€¢ ${textbookTerm}: ${userInfo.textbook || "KhÃ´ng Ä‘á» cáº­p"}
-â€¢ Äá»‘i tÆ°á»£ng nghiÃªn cá»©u: ${userInfo.researchSubjects || (isHigherEd ? "Sinh viÃªn táº¡i Ä‘Æ¡n vá»‹" : "Há»c sinh táº¡i Ä‘Æ¡n vá»‹")}
-â€¢ Thá»i gian thá»±c hiá»‡n: ${userInfo.timeframe || "NÄƒm há»c hiá»‡n táº¡i"}
-â€¢ Äáº·c thÃ¹ / CÃ´ng nghá»‡ / AI: ${userInfo.applyAI ? userInfo.applyAI : ''} ${userInfo.focus ? `- ${userInfo.focus}` : ''}
 
-${userInfo.referenceDocuments ? `â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-TÃ€I LIá»†U THAM KHáº¢O (DO GIÃO VIÃŠN CUNG Cáº¤P):
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-DÆ°á»›i Ä‘Ã¢y lÃ  ná»™i dung cÃ¡c tÃ i liá»‡u tham kháº£o mÃ  giÃ¡o viÃªn Ä‘Ã£ táº£i lÃªn. Báº®T BUá»˜C pháº£i bÃ¡m sÃ¡t vÃ o ná»™i dung nÃ y Ä‘á»ƒ viáº¿t SKKN phÃ¹ há»£p vÃ  chÃ­nh xÃ¡c:
+  → Nhóm: ${info.group}
+
+  → Đặc trưng: ${info.description}
+
+  → Hãy viết nội dung SKKN bám sát đặc thù lĩnh vực "${info.name}" thuộc nhóm "${info.group}"` : '';
+
+        })()
+
+        }
+
+• Cấp hĐc: ${userInfo.level}
+
+• Khối lớp / Đối tượng: ${userInfo.grade}
+
+• Tên ${schoolTerm}: ${userInfo.school}
+
+• Địa điểm: ${userInfo.location}
+
+• ĐiĐu kiện CSVC: ${userInfo.facilities}
+
+• ${textbookTerm}: ${userInfo.textbook || "Không đĐ cập"}
+
+• Đối tượng nghiên cứu: ${userInfo.researchSubjects || (isHigherEd ? "Sinh viên tại đơn vị" : "HĐc sinh tại đơn vị")}
+
+• ThĐi gian thực hiện: ${userInfo.timeframe || "Năm hĐc hiện tại"}
+
+• Đặc thù / Công nghệ / AI: ${userInfo.applyAI ? userInfo.applyAI : ''} ${userInfo.focus ? `- ${userInfo.focus}` : ''}
+
+
+
+${userInfo.referenceDocuments ? `ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
+TÀI LIỆU THAM KHẢO (DO GIĐO VIÊN CUNG CẤP):
+
+ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
+Dưới đây là nội dung các tài liệu tham khảo mà giáo viên đã tải lên. BẮT BUỘC phải bám sát vào nội dung này để viết SKKN phù hợp và chính xác:
+
+
 
 ${truncateForPrompt(userInfo.referenceDocuments)}
 
-[Háº¾T TÃ€I LIá»†U THAM KHáº¢O]
+
+
+[HẾT TÀI LIỆU THAM KHẢO]
+
 ` : ''
+
         }
 
-${userInfo.customTemplate ? getCustomTemplatePrompt() : (userInfo.skknTemplate ? `â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-ðŸš¨ðŸš¨ðŸš¨ MáºªU YÃŠU Cáº¦U SKKN Tá»ª Sá»ž/PHÃ’NG GD (Báº®T BUá»˜C TUYá»†T Äá»I) ðŸš¨ðŸš¨ðŸš¨
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-âš ï¸ Cáº¢NH BÃO QUAN TRá»ŒNG NHáº¤T: GiÃ¡o viÃªn Ä‘Ã£ cung cáº¥p MáºªU YÃŠU Cáº¦U SKKN chÃ­nh thá»©c bÃªn dÆ°á»›i.
 
-ðŸš« Báº N TUYá»†T Äá»I KHÃ”NG ÄÆ¯á»¢C sá»­ dá»¥ng báº¥t ká»³ cáº¥u trÃºc SKKN máº·c Ä‘á»‹nh/chuáº©n nÃ o.
-âœ… Báº N Báº®T BUá»˜C PHáº¢I viáº¿t HOÃ€N TOÃ€N theo cáº¥u trÃºc vÃ  máº«u nÃ y:
 
-1. Táº¡o dÃ n Ã½ vÃ  viáº¿t ná»™i dung ÄÃšNG CHÃNH XÃC theo cáº¥u trÃºc, cÃ¡c má»¥c, cÃ¡c pháº§n trong máº«u nÃ y
-2. TuÃ¢n theo ÄÃšNG trÃ¬nh tá»±, tÃªn gá»i, cÃ¡ch Ä‘Ã¡nh sá»‘ cÃ¡c má»¥c nhÆ° trong máº«u
-3. KHÃ”NG tá»± Ã½ thay Ä‘á»•i tÃªn má»¥c, KHÃ”NG bá» qua má»¥c nÃ o, KHÃ”NG thÃªm má»¥c náº¿u máº«u khÃ´ng yÃªu cáº§u
-4. KHÃ”NG sá»­ dá»¥ng cáº¥u trÃºc "Pháº§n I, II, III, IV, V, VI" máº·c Ä‘á»‹nh náº¿u máº«u cÃ³ cáº¥u trÃºc khÃ¡c
-5. Sá»‘ lÆ°á»£ng giáº£i phÃ¡p, tÃªn cÃ¡c pháº§n lá»›n, thá»© tá»± trÃ¬nh bÃ y Äá»€U PHáº¢I theo máº«u nÃ y
-6. Viáº¿t Ä‘Ãºng theo format vÃ  quy cÃ¡ch máº«u Ä‘á» ra
+${userInfo.customTemplate ? getCustomTemplatePrompt() : (userInfo.skknTemplate ? `ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
 
-Ná»˜I DUNG MáºªU SKKN (ÄÃ‚Y LÃ€ Cáº¤U TRÃšC DUY NHáº¤T ÄÆ¯á»¢C PHÃ‰P Sá»¬ Dá»¤NG):
+🚨🚨🚨 MẪU YÊU CẦU SKKN TỪ SỞ/PHÒNG GD (BẮT BUỘC TUYỆT ĐĐI) 🚨🚨🚨
+
+ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
+⚠Đ CẢNH BĐO QUAN TRỌNG NHẤT: Giáo viên đã cung cấp MẪU YÊU CẦU SKKN chính thức bên dưới.
+
+
+
+🚫 BẠN TUYỆT ĐĐI KHÔNG ĐƯỢC sử dụng bất kỳ cấu trúc SKKN mặc định/chuẩn nào.
+
+✅ BẠN BẮT BUỘC PHẢI viết HOÀN TOÀN theo cấu trúc và mẫu này:
+
+
+
+1. Tạo dàn ý và viết nội dung ĐÚNG CHĐNH XĐC theo cấu trúc, các mục, các phần trong mẫu này
+
+2. Tuân theo ĐÚNG trình tự, tên gĐi, cách đánh số các mục như trong mẫu
+
+3. KHÔNG tự ý thay đổi tên mục, KHÔNG bĐ qua mục nào, KHÔNG thêm mục nếu mẫu không yêu cầu
+
+4. KHÔNG sử dụng cấu trúc "Phần I, II, III, IV, V, VI" mặc định nếu mẫu có cấu trúc khác
+
+5. Số lượng giải pháp, tên các phần lớn, thứ tự trình bày ĐỀU PHẢI theo mẫu này
+
+6. Viết đúng theo format và quy cách mẫu đĐ ra
+
+
+
+NỘI DUNG MẪU SKKN (ĐÂY LÀ CẤU TRÚC DUY NHẤT ĐƯỢC PHÉP SỬ DỤNG):
+
 ${userInfo.skknTemplate}
 
-[Háº¾T MáºªU SKKN - Má»ŒI Ná»˜I DUNG PHáº¢I TUÃ‚N THá»¦ Cáº¤U TRÃšC TRÃŠN]
+
+
+[HẾT MẪU SKKN - MỌI NỘI DUNG PHẢI TUÂN THỦ CẤU TRÚC TRÊN]
+
 ` : '')
+
         }
 
-${userInfo.specialRequirements ? `â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-ðŸ“ YÃŠU Cáº¦U Äáº¶C BIá»†T Tá»ª GIÃO VIÃŠN (Báº®T BUá»˜C THá»°C HIá»†N):
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-âš ï¸ QUAN TRá»ŒNG: GiÃ¡o viÃªn Ä‘Ã£ Ä‘Æ°a ra cÃ¡c yÃªu cáº§u Ä‘áº·c biá»‡t sau.
-Báº N Báº®T BUá»˜C PHáº¢I TUÃ‚N THá»¦ NGHIÃŠM NGáº¶T:
+
+
+${userInfo.specialRequirements ? `ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
+Đ YÊU CẦU ĐẶC BIỆT TỪ GIĐO VIÊN (BẮT BUỘC THỰC HIỆN):
+
+ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
+⚠Đ QUAN TRỌNG: Giáo viên đã đưa ra các yêu cầu đặc biệt sau.
+
+BẠN BẮT BUỘC PHẢI TUÂN THỦ NGHIÊM NGẶT:
+
+
 
 ${userInfo.specialRequirements}
 
-HÃ£y phÃ¢n tÃ­ch ká»¹ cÃ¡c yÃªu cáº§u trÃªn vÃ  Ã¡p dá»¥ng CHÃNH XÃC vÃ o toÃ n bá»™ bÃ i viáº¿t.
 
-ðŸ“Œ HÆ¯á»šNG DáºªN Xá»¬ LÃ GIá»šI Háº N Sá» TRANG:
-- Náº¿u yÃªu cáº§u "giá»›i háº¡n X trang" â†’ Sá»‘ trang nÃ y tÃ­nh tá»« PHáº¦N I & II Ä‘áº¿n háº¿t PHáº¦N V, VI & Káº¾T LUáº¬N
-- KHÃ”NG tÃ­nh dÃ n Ã½ vÃ o giá»›i háº¡n sá»‘ trang
-- KHÃ”NG tÃ­nh Phá»¥ lá»¥c vÃ o giá»›i háº¡n sá»‘ trang (Phá»¥ lá»¥c Ä‘Æ°á»£c táº¡o riÃªng, khÃ´ng giá»›i háº¡n)
-- PhÃ¢n bá»• sá»‘ trang há»£p lÃ½ cho Ná»˜I DUNG CHÃNH (khÃ´ng tÃ­nh Phá»¥ lá»¥c):
-  + Pháº§n I & II: Tá»I ÄA 4 trang (khoáº£ng 10%)
-  + Pháº§n III (Thá»±c tráº¡ng): Tá»I ÄA 3 trang (khoáº£ng 7-8%)
-  + Pháº§n IV (Giáº£i phÃ¡p): khoáº£ng 55-65% tá»•ng sá»‘ trang (pháº§n quan trá»ng nháº¥t)
-  + Pháº§n V, VI & Káº¿t luáº­n: khoáº£ng 15-20% tá»•ng sá»‘ trang
 
-VÃ­ dá»¥: Náº¿u giá»›i háº¡n 40 trang (KHÃ”NG tÃ­nh Phá»¥ lá»¥c):
-  + Pháº§n I & II: 3-4 trang (Tá»I ÄA 4 trang)
-  + Pháº§n III: 2-3 trang (Tá»I ÄA 3 trang)
-  + Pháº§n IV: 24-28 trang
-  + Pháº§n V, VI & Káº¿t luáº­n: 6-8 trang
-  + Phá»¥ lá»¥c: TÃNH RIÃŠNG (khÃ´ng giá»›i háº¡n)
+Hãy phân tích kỹ các yêu cầu trên và áp dụng CHĐNH XĐC vào toàn bộ bài viết.
 
-CÃ¡c yÃªu cáº§u khÃ¡c:
-- Náº¿u yÃªu cáº§u "viáº¿t ngáº¯n gá»n pháº§n lÃ½ thuyáº¿t" â†’ TÃ³m táº¯t cÃ´ Ä‘á»ng pháº§n cÆ¡ sá»Ÿ lÃ½ luáº­n
-- Náº¿u yÃªu cáº§u "thÃªm nhiá»u bÃ i toÃ¡n thá»±c táº¿" â†’ Bá»• sung vÃ­ dá»¥ toÃ¡n thá»±c táº¿ phong phÃº
-- Náº¿u yÃªu cáº§u "táº­p trung vÃ o giáº£i phÃ¡p" â†’ Æ¯u tiÃªn pháº§n IV vá»›i nhiá»u chi tiáº¿t hÆ¡n
 
-[Háº¾T YÃŠU Cáº¦U Äáº¶C BIá»†T]
+
+📌 HƯỚNG DẪN XỬ LĐ GIỚI HẠN SĐ TRANG:
+
+- Nếu yêu cầu "giới hạn X trang" → Số trang này tính từ PHẦN I & II đến hết PHẦN V, VI & KẾT LUẬN
+
+- KHÔNG tính dàn ý vào giới hạn số trang
+
+- KHÔNG tính Phụ lục vào giới hạn số trang (Phụ lục được tạo riêng, không giới hạn)
+
+- Phân bổ số trang hợp lý cho NỘI DUNG CHĐNH (không tính Phụ lục):
+
+  + Phần I & II: TĐI ĐA 4 trang (khoảng 10%)
+
+  + Phần III (Thực trạng): TĐI ĐA 3 trang (khoảng 7-8%)
+
+  + Phần IV (Giải pháp): khoảng 55-65% tổng số trang (phần quan trĐng nhất)
+
+  + Phần V, VI & Kết luận: khoảng 15-20% tổng số trang
+
+
+
+Ví dụ: Nếu giới hạn 40 trang (KHÔNG tính Phụ lục):
+
+  + Phần I & II: 3-4 trang (TĐI ĐA 4 trang)
+
+  + Phần III: 2-3 trang (TĐI ĐA 3 trang)
+
+  + Phần IV: 24-28 trang
+
+  + Phần V, VI & Kết luận: 6-8 trang
+
+  + Phụ lục: TĐNH RIÊNG (không giới hạn)
+
+
+
+Các yêu cầu khác:
+
+- Nếu yêu cầu "viết ngắn gĐn phần lý thuyết" → Tóm tắt cô đĐng phần cơ sở lý luận
+
+- Nếu yêu cầu "thêm nhiĐu bài toán thực tế" → Bổ sung ví dụ toán thực tế phong phú
+
+- Nếu yêu cầu "tập trung vào giải pháp" → Ưu tiên phần IV với nhiĐu chi tiết hơn
+
+
+
+[HẾT YÊU CẦU ĐẶC BIỆT]
+
 ` : ''
+
         }
 
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-âš ï¸ YÃŠU Cáº¦U Äá»ŠNH Dáº NG OUTPUT(Báº®T BUá»˜C):
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-1. SAU Má»–I CÃ‚U: Pháº£i xuá»‘ng dÃ²ng(Enter 2 láº§n).
-2. SAU Má»–I ÄOáº N: CÃ¡ch 1 dÃ²ng trá»‘ng.
-3. KHÃ”NG viáº¿t dÃ­nh liá»n(wall of text).
-4. Sá»­ dá»¥ng gáº¡ch Ä‘áº§u dÃ²ng vÃ  tiÃªu Ä‘á» rÃµ rÃ ng.
+
+
+ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
+⚠Đ YÊU CẦU ĐỊNH DẠNG OUTPUT(BẮT BUỘC):
+
+ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
+1. SAU MỖI CÂU: Phải xuống dòng(Enter 2 lần).
+
+2. SAU MỖI ĐOẠN: Cách 1 dòng trống.
+
+3. KHÔNG viết dính liĐn(wall of text).
+
+4. Sử dụng gạch đầu dòng và tiêu đĐ rõ ràng.
+
+
 
   ${(userInfo.skknTemplate || userInfo.customTemplate) ? '' : (isHigherEd ? `
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-Cáº¤U TRÃšC SKKN Báº¬C CAO (TRUNG Cáº¤P / CAO Äáº²NG / Äáº I Há»ŒC):
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
 
-ðŸ“‹ MÃ” Táº¢ SÃNG KIáº¾N
+ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
 
-1. Bá»I Cáº¢NH VÃ€ LÃ DO NGHIÃŠN Cá»¨U (3-4 trang)
+CẤU TRÚC SKKN BẬC CAO (TRUNG CẤP / CAO ĐẲNG / ĐẠI HỌC):
 
-   1.1. Bá»‘i cáº£nh giÃ¡o dá»¥c Ä‘áº¡i há»c Viá»‡t Nam hiá»‡n nay
-        â†’ Nghá»‹ quyáº¿t 29-NQ/TW vá» Ä‘á»•i má»›i cÄƒn báº£n, toÃ n diá»‡n giÃ¡o dá»¥c
-        â†’ Luáº­t GiÃ¡o dá»¥c Ä‘áº¡i há»c 2018 (sá»­a Ä‘á»•i 2024)
-        â†’ YÃªu cáº§u Ä‘á»•i má»›i phÆ°Æ¡ng phÃ¡p giáº£ng dáº¡y ${userInfo.subject} báº­c ${userInfo.level}
-        â†’ Xu hÆ°á»›ng chuyá»ƒn Ä‘á»•i sá»‘, chuáº©n Ä‘áº§u ra CDIO/ABET
-        â†’ CÃ¡ch máº¡ng cÃ´ng nghiá»‡p 4.0 vÃ  yÃªu cáº§u nguá»“n nhÃ¢n lá»±c cháº¥t lÆ°á»£ng cao
+ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
+
+
+📋 MÔ TẢ SĐNG KIẾN
+
+
+
+1. BĐI CẢNH VÀ LĐ DO NGHIÊN CỨU (3-4 trang)
+
+
+
+   1.1. Bối cảnh giáo dục đại hĐc Việt Nam hiện nay
+
+        → Nghị quyết 29-NQ/TW vĐ đổi mới căn bản, toàn diện giáo dục
+
+        → Luật Giáo dục đại hĐc 2018 (sửa đổi 2024)
+
+        → Yêu cầu đổi mới phương pháp giảng dạy ${userInfo.subject} bậc ${userInfo.level}
+
+        → Xu hướng chuyển đổi số, chuẩn đầu ra CDIO/ABET
+
+        → Cách mạng công nghiệp 4.0 và yêu cầu nguồn nhân lực chất lượng cao
+
         
-   1.2. Xuáº¥t phÃ¡t tá»« thá»±c tiá»…n giáº£ng dáº¡y
-        â†’ Thá»±c tráº¡ng giáº£ng dáº¡y ${userInfo.subject} táº¡i ${userInfo.school}
-        â†’ Äáº·c Ä‘iá»ƒm ${userInfo.grade}: nÄƒng lá»±c Ä‘áº§u vÃ o, Ä‘á»™ng lá»±c há»c táº­p
-        â†’ Háº¡n cháº¿ cá»§a phÆ°Æ¡ng phÃ¡p giáº£ng dáº¡y truyá»n thá»‘ng á»Ÿ báº­c ${userInfo.level}
-        â†’ Khoáº£ng cÃ¡ch giá»¯a Ä‘Ã o táº¡o vÃ  nhu cáº§u thá»‹ trÆ°á»ng lao Ä‘á»™ng
 
-2. Tá»”NG QUAN TÃ€I LIá»†U & CÆ  Sá»ž LÃ LUáº¬N (5-7 trang)
+   1.2. Xuất phát từ thực tiễn giảng dạy
 
-   2.1. Tá»•ng quan nghiÃªn cá»©u (Literature Review)
-        â†’ CÃ¡c nghiÃªn cá»©u trong nÆ°á»›c liÃªn quan (Ã­t nháº¥t 3-5 nghiÃªn cá»©u)
-        â†’ CÃ¡c nghiÃªn cá»©u quá»‘c táº¿ liÃªn quan (Ã­t nháº¥t 3-5 nghiÃªn cá»©u)
-        â†’ PhÃ¢n tÃ­ch khoáº£ng trá»‘ng nghiÃªn cá»©u (Research Gap)
-        â†’ TrÃ­ch dáº«n chuáº©n APA: (TÃ¡c giáº£, NÄƒm)
+        → Thực trạng giảng dạy ${userInfo.subject} tại ${userInfo.school}
+
+        → Đặc điểm ${userInfo.grade}: năng lực đầu vào, động lực hĐc tập
+
+        → Hạn chế của phương pháp giảng dạy truyĐn thống ở bậc ${userInfo.level}
+
+        → Khoảng cách giữa đào tạo và nhu cầu thị trưĐng lao động
+
+
+
+2. TỔNG QUAN TÀI LIỆU & CƠ SỞ LĐ LUẬN (5-7 trang)
+
+
+
+   2.1. Tổng quan nghiên cứu (Literature Review)
+
+        → Các nghiên cứu trong nước liên quan (ít nhất 3-5 nghiên cứu)
+
+        → Các nghiên cứu quốc tế liên quan (ít nhất 3-5 nghiên cứu)
+
+        → Phân tích khoảng trống nghiên cứu (Research Gap)
+
+        → Trích dẫn chuẩn APA: (Tác giả, Năm)
+
         
-   2.2. Khung lÃ½ thuyáº¿t (Theoretical Framework)
-        â†’ Andragogy - LÃ½ thuyáº¿t há»c táº­p ngÆ°á»i lá»›n (Knowles)
-        â†’ Experiential Learning - Há»c qua tráº£i nghiá»‡m (Kolb)
-        â†’ Constructive Alignment - CÄƒn chá»‰nh kiáº¿n táº¡o (Biggs)
-        â†’ Bloom's Taxonomy báº­c cao (Analyze, Evaluate, Create)
-        â†’ Outcome-based Education (OBE)
-        [PhÃ¢n tÃ­ch sÃ¢u + LiÃªn há»‡ Ä‘á» tÃ i táº¡i ${userInfo.school}]
+
+   2.2. Khung lý thuyết (Theoretical Framework)
+
+        → Andragogy - Lý thuyết hĐc tập ngưĐi lớn (Knowles)
+
+        → Experiential Learning - HĐc qua trải nghiệm (Kolb)
+
+        → Constructive Alignment - Căn chỉnh kiến tạo (Biggs)
+
+        → Bloom's Taxonomy bậc cao (Analyze, Evaluate, Create)
+
+        → Outcome-based Education (OBE)
+
+        [Phân tích sâu + Liên hệ đĐ tài tại ${userInfo.school}]
+
         
-   2.3. CÆ¡ sá»Ÿ phÃ¡p lÃ½
-        â†’ Luáº­t GiÃ¡o dá»¥c Ä‘áº¡i há»c 2018, sá»­a Ä‘á»•i bá»• sung
-        â†’ ThÃ´ng tÆ° quy Ä‘á»‹nh vá» chuáº©n chÆ°Æ¡ng trÃ¬nh Ä‘Ã o táº¡o
-        â†’ Quy cháº¿ Ä‘Ã o táº¡o trÃ¬nh Ä‘á»™ ${userInfo.level}
 
-3. PHÃ‚N TÃCH HIá»†N TRáº NG & ÄÃNH GIÃ NHU Cáº¦U (5-6 trang)
+   2.3. Cơ sở pháp lý
 
-   3.1. Hiá»‡n tráº¡ng tá»•ng quan
-        â†’ Äiá»u kiá»‡n CSVC táº¡i ${userInfo.school} (${userInfo.facilities})
-        â†’ Äáº·c thÃ¹ Ä‘Ã o táº¡o ngÃ nh/chuyÃªn ngÃ nh liÃªn quan
-        â†’ Chuáº©n Ä‘áº§u ra chÆ°Æ¡ng trÃ¬nh Ä‘Ã o táº¡o hiá»‡n hÃ nh
+        → Luật Giáo dục đại hĐc 2018, sửa đổi bổ sung
+
+        → Thông tư quy định vĐ chuẩn chương trình đào tạo
+
+        → Quy chế đào tạo trình độ ${userInfo.level}
+
+
+
+3. PHÂN TĐCH HIỆN TRẠNG & ĐĐNH GIĐ NHU CẦU (5-6 trang)
+
+
+
+   3.1. Hiện trạng tổng quan
+
+        → ĐiĐu kiện CSVC tại ${userInfo.school} (${userInfo.facilities})
+
+        → Đặc thù đào tạo ngành/chuyên ngành liên quan
+
+        → Chuẩn đầu ra chương trình đào tạo hiện hành
+
         
-   3.2. Kháº£o sÃ¡t giáº£ng viÃªn
-        â†’ Báº£ng kháº£o sÃ¡t giáº£ng viÃªn (n=X, sá»­ dá»¥ng thang Likert 5 Ä‘iá»ƒm)
-        â†’ PhÆ°Æ¡ng phÃ¡p giáº£ng dáº¡y hiá»‡n táº¡i
-        â†’ Thuáº­n lá»£i - KhÃ³ khÄƒn trong giáº£ng dáº¡y báº­c ${userInfo.level}
-        â†’ Cronbach's Alpha kiá»ƒm tra Ä‘á»™ tin cáº­y
+
+   3.2. Khảo sát giảng viên
+
+        → Bảng khảo sát giảng viên (n=X, sử dụng thang Likert 5 điểm)
+
+        → Phương pháp giảng dạy hiện tại
+
+        → Thuận lợi - Khó khăn trong giảng dạy bậc ${userInfo.level}
+
+        → Cronbach's Alpha kiểm tra độ tin cậy
+
         
-   3.3. Kháº£o sÃ¡t sinh viÃªn
-        â†’ Báº£ng kháº£o sÃ¡t sinh viÃªn ${userInfo.grade} (n=Y)  
-        â†’ Káº¿t quáº£ há»c táº­p trÆ°á»›c khi Ã¡p dá»¥ng sÃ¡ng kiáº¿n
-        â†’ Má»©c Ä‘á»™ hÃ i lÃ²ng, Ä‘á»™ng lá»±c há»c táº­p
-        â†’ Ká»¹ nÄƒng tá»± há»c, nghiÃªn cá»©u
-        â†’ Nhu cáº§u Ä‘á»•i má»›i phÆ°Æ¡ng phÃ¡p
+
+   3.3. Khảo sát sinh viên
+
+        → Bảng khảo sát sinh viên ${userInfo.grade} (n=Y)  
+
+        → Kết quả hĐc tập trước khi áp dụng sáng kiến
+
+        → Mức độ hài lòng, động lực hĐc tập
+
+        → Kỹ năng tự hĐc, nghiên cứu
+
+        → Nhu cầu đổi mới phương pháp
+
         
-   â†’ PhÃ¢n tÃ­ch nguyÃªn nhÃ¢n báº±ng mÃ´ hÃ¬nh Fishbone/SWOT
 
-4. CÃC GIáº¢I PHÃP, BIá»†N PHÃP THá»°C HIá»†N (12-18 trang - PHáº¦N QUAN TRá»ŒNG NHáº¤T)
+   → Phân tích nguyên nhân bằng mô hình Fishbone/SWOT
 
-   âš ï¸ Má»–I GIáº¢I PHÃP PHáº¢I CÃ“ CÆ  Sá»ž NGHIÃŠN Cá»¨U KHOA Há»ŒC RÃ• RÃ€NG.
 
-   GIáº¢I PHÃP 1: [TÃªn giáº£i phÃ¡p - dá»±a trÃªn nghiÃªn cá»©u khoa há»c]
+
+4. CĐC GIẢI PHĐP, BIỆN PHĐP THỰC HIỆN (12-18 trang - PHẦN QUAN TRỌNG NHẤT)
+
+
+
+   ⚠Đ MỖI GIẢI PHĐP PHẢI CÓ CƠ SỞ NGHIÊN CỨU KHOA HỌC RÕ RÀNG.
+
+
+
+   GIẢI PHĐP 1: [Tên giải pháp - dựa trên nghiên cứu khoa hĐc]
+
    
-        1.1. Má»¥c tiÃªu giáº£i phÃ¡p (gáº¯n vá»›i Chuáº©n Ä‘áº§u ra / Learning Outcomes)
-             â†’ Má»¥c tiÃªu vá» kiáº¿n thá»©c chuyÃªn ngÃ nh
-             â†’ Má»¥c tiÃªu vá» nÄƒng lá»±c nghá» nghiá»‡p
-             â†’ Má»¥c tiÃªu vá» ká»¹ nÄƒng má»m, tÆ° duy pháº£n biá»‡n
-             
-        1.2. CÆ¡ sá»Ÿ khoa há»c & NghiÃªn cá»©u liÃªn quan
-             â†’ TrÃ­ch dáº«n 2-3 nghiÃªn cá»©u há»— trá»£ (APA)
-             â†’ PhÃ¢n tÃ­ch mÃ´ hÃ¬nh quá»‘c táº¿ tÆ°Æ¡ng tá»±
-             â†’ Äiá»ƒm má»›i, sÃ¡ng táº¡o so vá»›i nghiÃªn cá»©u trÆ°á»›c
-             
-        1.3. Thiáº¿t káº¿ nghiÃªn cá»©u & Quy trÃ¬nh
-             â†’ Thiáº¿t káº¿: thá»±c nghiá»‡m/bÃ¡n thá»±c nghiá»‡m/nghiÃªn cá»©u hÃ nh Ä‘á»™ng
-             â†’ NhÃ³m thá»±c nghiá»‡m (n=?) vÃ  nhÃ³m Ä‘á»‘i chá»©ng (n=?)
-             â†’ Quy trÃ¬nh thá»±c hiá»‡n chi tiáº¿t (5-7 bÆ°á»›c)
-             â†’ CÃ´ng cá»¥ Ä‘Ã¡nh giÃ¡: rubric, bÃ i thi, kháº£o sÃ¡t
-             
-        1.4. VÃ­ dá»¥ minh há»a cá»¥ thá»ƒ
-             â†’ BÃ i giáº£ng/há»c pháº§n cá»¥ thá»ƒ trong giÃ¡o trÃ¬nh ${userInfo.textbook || "hiá»‡n hÃ nh"}
-             â†’ Hoáº¡t Ä‘á»™ng giáº£ng dáº¡y chi tiáº¿t
-             â†’ Sáº£n pháº©m sinh viÃªn máº«u / Äá»“ Ã¡n / Tiá»ƒu luáº­n
-             
-        1.5. Äiá»u kiá»‡n thá»±c hiá»‡n & Háº¡n cháº¿
-             â†’ YÃªu cáº§u vá» CSVC (táº­n dá»¥ng ${userInfo.facilities})
-             â†’ Háº¡n cháº¿ cá»§a phÆ°Æ¡ng phÃ¡p (pháº£n biá»‡n)
-             â†’ Äiá»u kiá»‡n nhÃ¢n rá»™ng
 
-   GIáº¢I PHÃP 2: [TÃªn giáº£i phÃ¡p - dá»±a trÃªn nghiÃªn cá»©u khoa há»c]
-        [Cáº¥u trÃºc tÆ°Æ¡ng tá»±, triá»ƒn khai Ä‘áº§y Ä‘á»§ 5 má»¥c]
+        1.1. Mục tiêu giải pháp (gắn với Chuẩn đầu ra / Learning Outcomes)
 
-   GIáº¢I PHÃP 3: [TÃªn giáº£i phÃ¡p - dá»±a trÃªn nghiÃªn cá»©u khoa há»c]
-        [Cáº¥u trÃºc tÆ°Æ¡ng tá»±, triá»ƒn khai Ä‘áº§y Ä‘á»§ 5 má»¥c]
+             → Mục tiêu vĐ kiến thức chuyên ngành
+
+             → Mục tiêu vĐ năng lực nghĐ nghiệp
+
+             → Mục tiêu vĐ kỹ năng mĐm, tư duy phản biện
+
+             
+
+        1.2. Cơ sở khoa hĐc & Nghiên cứu liên quan
+
+             → Trích dẫn 2-3 nghiên cứu hỗ trợ (APA)
+
+             → Phân tích mô hình quốc tế tương tự
+
+             → Điểm mới, sáng tạo so với nghiên cứu trước
+
+             
+
+        1.3. Thiết kế nghiên cứu & Quy trình
+
+             → Thiết kế: thực nghiệm/bán thực nghiệm/nghiên cứu hành động
+
+             → Nhóm thực nghiệm (n=?) và nhóm đối chứng (n=?)
+
+             → Quy trình thực hiện chi tiết (5-7 bước)
+
+             → Công cụ đánh giá: rubric, bài thi, khảo sát
+
+             
+
+        1.4. Ví dụ minh hĐa cụ thể
+
+             → Bài giảng/hĐc phần cụ thể trong giáo trình ${userInfo.textbook || "hiện hành"}
+
+             → Hoạt động giảng dạy chi tiết
+
+             → Sản phẩm sinh viên mẫu / Đồ án / Tiểu luận
+
+             
+
+        1.5. ĐiĐu kiện thực hiện & Hạn chế
+
+             → Yêu cầu vĐ CSVC (tận dụng ${userInfo.facilities})
+
+             → Hạn chế của phương pháp (phản biện)
+
+             → ĐiĐu kiện nhân rộng
+
+
+
+   GIẢI PHĐP 2: [Tên giải pháp - dựa trên nghiên cứu khoa hĐc]
+
+        [Cấu trúc tương tự, triển khai đầy đủ 5 mục]
+
+
+
+   GIẢI PHĐP 3: [Tên giải pháp - dựa trên nghiên cứu khoa hĐc]
+
+        [Cấu trúc tương tự, triển khai đầy đủ 5 mục]
+
    ${(userInfo.numSolutions || 3) > 3 ? `
-   GIáº¢I PHÃP 4: [TÃªn giáº£i phÃ¡p nÃ¢ng cao - á»©ng dá»¥ng cÃ´ng nghá»‡]
-        [Giáº£i phÃ¡p tÃ­ch há»£p LMS, AI, Virtual Lab...]
+
+   GIẢI PHĐP 4: [Tên giải pháp nâng cao - ứng dụng công nghệ]
+
+        [Giải pháp tích hợp LMS, AI, Virtual Lab...]
+
    ${(userInfo.numSolutions || 3) > 4 ? `
-   GIáº¢I PHÃP 5: [TÃªn giáº£i phÃ¡p phÃ¡t triá»ƒn - há»£p tÃ¡c doanh nghiá»‡p]
-        [Giáº£i phÃ¡p gáº¯n káº¿t Ä‘Ã o táº¡o vá»›i thá»‹ trÆ°á»ng lao Ä‘á»™ng]
+
+   GIẢI PHĐP 5: [Tên giải pháp phát triển - hợp tác doanh nghiệp]
+
+        [Giải pháp gắn kết đào tạo với thị trưĐng lao động]
+
    ` : ''}
+
    ` : ''}
-   â†’ Má»I LIÃŠN Há»† Há»† THá»NG GIá»®A CÃC GIáº¢I PHÃP
 
-5. Káº¾T QUáº¢ NGHIÃŠN Cá»¨U & ÄÃNH GIÃ (5-6 trang)
+   → MĐI LIÊN HỆ HỆ THĐNG GIỮA CĐC GIẢI PHĐP
 
-   5.1. Má»¥c Ä‘Ã­ch & PhÆ°Æ¡ng phÃ¡p Ä‘Ã¡nh giÃ¡
-        â†’ Thiáº¿t káº¿ thá»±c nghiá»‡m: Pre-test / Post-test
-        â†’ CÃ´ng cá»¥ thu tháº­p dá»¯ liá»‡u: BÃ i thi, báº£ng há»i Likert, phá»ng váº¥n sÃ¢u
+
+
+5. KẾT QUẢ NGHIÊN CỨU & ĐĐNH GIĐ (5-6 trang)
+
+
+
+   5.1. Mục đích & Phương pháp đánh giá
+
+        → Thiết kế thực nghiệm: Pre-test / Post-test
+
+        → Công cụ thu thập dữ liệu: Bài thi, bảng hĐi Likert, phĐng vấn sâu
+
         
-   5.2. Káº¿t quáº£ Ä‘á»‹nh lÆ°á»£ng
-        â†’ Äá»‘i tÆ°á»£ng: ${userInfo.researchSubjects || "Sinh viÃªn táº¡i Ä‘Æ¡n vá»‹"}
-        â†’ Thá»i gian: ${userInfo.timeframe || "NÄƒm há»c hiá»‡n táº¡i"}
-        â†’ Báº£ng káº¿t quáº£ kÃ¨m phÃ¢n tÃ­ch thá»‘ng kÃª (Mean, SD, t-value, p-value)
-        â†’ Effect size (Cohen's d)
-        â†’ Biá»ƒu Ä‘á»“ so sÃ¡nh nhÃ³m thá»±c nghiá»‡m vs Ä‘á»‘i chá»©ng
+
+   5.2. Kết quả định lượng
+
+        → Đối tượng: ${userInfo.researchSubjects || "Sinh viên tại đơn vị"}
+
+        → ThĐi gian: ${userInfo.timeframe || "Năm hĐc hiện tại"}
+
+        → Bảng kết quả kèm phân tích thống kê (Mean, SD, t-value, p-value)
+
+        → Effect size (Cohen's d)
+
+        → Biểu đồ so sánh nhóm thực nghiệm vs đối chứng
+
         
-   5.3. Káº¿t quáº£ Ä‘á»‹nh tÃ­nh
-        â†’ Phá»ng váº¥n sinh viÃªn, giáº£ng viÃªn
-        â†’ Quan sÃ¡t lá»›p há»c / giáº£ng Ä‘Æ°á»ng
-        â†’ PhÃ¢n tÃ­ch sáº£n pháº©m sinh viÃªn
-        â†’ Ã kiáº¿n pháº£n há»“i tá»« chuyÃªn gia, Ä‘á»“ng nghiá»‡p
 
-6. ÄIá»€U KIá»†N NHÃ‚N Rá»˜NG & PHÃT TRIá»‚N (1-2 trang)
+   5.3. Kết quả định tính
 
-   â†’ Äiá»u kiá»‡n vá» CSVC, cÃ´ng nghá»‡
-   â†’ Äiá»u kiá»‡n vá» nÄƒng lá»±c giáº£ng viÃªn, bá»“i dÆ°á»¡ng
-   â†’ Pháº¡m vi Ã¡p dá»¥ng: cÃ¡c trÆ°á»ng ${userInfo.level} khÃ¡c
-   â†’ HÆ°á»›ng nghiÃªn cá»©u phÃ¡t triá»ƒn tiáº¿p theo
+        → PhĐng vấn sinh viên, giảng viên
 
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+        → Quan sát lớp hĐc / giảng đưĐng
 
-ðŸ“Œ Káº¾T LUáº¬N VÃ€ KHUYáº¾N NGHá»Š (2-3 trang)
+        → Phân tích sản phẩm sinh viên
 
-1. Káº¿t luáº­n
-   â†’ TÃ³m táº¯t Ä‘Ã³ng gÃ³p chÃ­nh cá»§a sÃ¡ng kiáº¿n
-   â†’ TÃ­nh má»›i vÃ  giÃ¡ trá»‹ khoa há»c
-   â†’ GiÃ¡ trá»‹ thá»±c tiá»…n cho Ä‘Ã o táº¡o báº­c ${userInfo.level}
+        → Đ kiến phản hồi từ chuyên gia, đồng nghiệp
 
-2. Khuyáº¿n nghá»‹  
-   â†’ Vá»›i nhÃ  trÆ°á»ng / Ban giÃ¡m hiá»‡u
-   â†’ Vá»›i khoa / bá»™ mÃ´n
-   â†’ Vá»›i giáº£ng viÃªn
-   â†’ Vá»›i Bá»™ GD&ÄT / Há»™i Ä‘á»“ng khoa há»c
-   â†’ HÆ°á»›ng nghiÃªn cá»©u phÃ¡t triá»ƒn tiáº¿p
 
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
 
-ðŸ“š TÃ€I LIá»†U THAM KHáº¢O
-   â†’ Liá»‡t kÃª 10-15 tÃ i liá»‡u theo chuáº©n APA (gá»“m tiáº¿ng Viá»‡t vÃ  tiáº¿ng Anh)
+6. ĐIỀU KIỆN NHÂN RỘNG & PHĐT TRIỂN (1-2 trang)
 
-ðŸ“Ž PHá»¤ Lá»¤C
-   â†’ Phiáº¿u kháº£o sÃ¡t (Likert scale)
-   â†’ Äá» cÆ°Æ¡ng bÃ i giáº£ng minh há»a
-   â†’ Rubric Ä‘Ã¡nh giÃ¡
-   â†’ Sáº£n pháº©m sinh viÃªn
-   â†’ Káº¿t quáº£ phÃ¢n tÃ­ch thá»‘ng kÃª chi tiáº¿t
+
+
+   → ĐiĐu kiện vĐ CSVC, công nghệ
+
+   → ĐiĐu kiện vĐ năng lực giảng viên, bồi dưỡng
+
+   → Phạm vi áp dụng: các trưĐng ${userInfo.level} khác
+
+   → Hướng nghiên cứu phát triển tiếp theo
+
+
+
+ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
+
+
+📌 KẾT LUẬN VÀ KHUYẾN NGHỊ (2-3 trang)
+
+
+
+1. Kết luận
+
+   → Tóm tắt đóng góp chính của sáng kiến
+
+   → Tính mới và giá trị khoa hĐc
+
+   → Giá trị thực tiễn cho đào tạo bậc ${userInfo.level}
+
+
+
+2. Khuyến nghị  
+
+   → Với nhà trưĐng / Ban giám hiệu
+
+   → Với khoa / bộ môn
+
+   → Với giảng viên
+
+   → Với Bộ GD&ĐT / Hội đồng khoa hĐc
+
+   → Hướng nghiên cứu phát triển tiếp
+
+
+
+ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
+
+
+📚 TÀI LIỆU THAM KHẢO
+
+   → Liệt kê 10-15 tài liệu theo chuẩn APA (gồm tiếng Việt và tiếng Anh)
+
+
+
+📎 PHỤ LỤC
+
+   → Phiếu khảo sát (Likert scale)
+
+   → ĐĐ cương bài giảng minh hĐa
+
+   → Rubric đánh giá
+
+   → Sản phẩm sinh viên
+
+   → Kết quả phân tích thống kê chi tiết
+
 ` : `
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-Cáº¤U TRÃšC SKKN CHUáº¨N (ÃP Dá»¤NG KHI KHÃ”NG CÃ“ MáºªU RIÃŠNG):
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
 
-ðŸ“‹ MÃ” Táº¢ SÃNG KIáº¾N
+ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
 
-1. HOÃ€N Cáº¢NH Náº¢Y SINH SÃNG KIáº¾N (3-4 trang)
+CẤU TRÚC SKKN CHUẨN (ĐP DỤNG KHI KHÔNG CÓ MẪU RIÊNG):
 
-   1.1. Xuáº¥t phÃ¡t tá»« má»¥c tiÃªu cá»§a giÃ¡o dá»¥c Viá»‡t Nam trong thá»i kÃ¬ hiá»‡n nay
-        â†’ Nghá»‹ quyáº¿t 29-NQ/TW vá» Ä‘á»•i má»›i cÄƒn báº£n, toÃ n diá»‡n giÃ¡o dá»¥c
-        â†’ ChÆ°Æ¡ng trÃ¬nh GDPT 2018 - Ä‘á»‹nh hÆ°á»›ng phÃ¡t triá»ƒn nÄƒng lá»±c, pháº©m cháº¥t
-        â†’ YÃªu cáº§u Ä‘á»•i má»›i dáº¡y há»c mÃ´n ${userInfo.subject}
-        â†’ Xu hÆ°á»›ng chuyá»ƒn Ä‘á»•i sá»‘ trong giÃ¡o dá»¥c
+ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
+
+
+📋 MÔ TẢ SĐNG KIẾN
+
+
+
+1. HOÀN CẢNH NẢY SINH SĐNG KIẾN (3-4 trang)
+
+
+
+   1.1. Xuất phát từ mục tiêu của giáo dục Việt Nam trong thĐi kì hiện nay
+
+        → Nghị quyết 29-NQ/TW vĐ đổi mới căn bản, toàn diện giáo dục
+
+        → Chương trình GDPT 2018 - định hướng phát triển năng lực, phẩm chất
+
+        → Yêu cầu đổi mới dạy hĐc môn ${userInfo.subject}
+
+        → Xu hướng chuyển đổi số trong giáo dục
+
         
-   1.2. Xuáº¥t phÃ¡t tá»« thá»±c tiá»…n dáº¡y - há»c hiá»‡n nay
-        â†’ Thá»±c tráº¡ng dáº¡y há»c mÃ´n ${userInfo.subject} táº¡i ${userInfo.school}
-        â†’ KhÃ³ khÄƒn, thÃ¡ch thá»©c cá»§a há»c sinh ${userInfo.grade}
-        â†’ Háº¡n cháº¿ cá»§a phÆ°Æ¡ng phÃ¡p dáº¡y há»c truyá»n thá»‘ng
-        â†’ Nhu cáº§u cáº¥p thiáº¿t Ä‘á»•i má»›i Ä‘á»ƒ nÃ¢ng cao cháº¥t lÆ°á»£ng
 
-2. CÆ  Sá»ž LÃ LUáº¬N Cá»¦A Váº¤N Äá»€ (4-5 trang)
+   1.2. Xuất phát từ thực tiễn dạy - hĐc hiện nay
 
-   2.1. CÃ¡c khÃ¡i niá»‡m cÆ¡ báº£n liÃªn quan Ä‘áº¿n Ä‘á» tÃ i
-        â†’ Äá»‹nh nghÄ©a, thuáº­t ngá»¯ then chá»‘t (DIá»„N GIáº¢I theo cÃ¡ch riÃªng, khÃ´ng copy)
+        → Thực trạng dạy hĐc môn ${userInfo.subject} tại ${userInfo.school}
+
+        → Khó khăn, thách thức của hĐc sinh ${userInfo.grade}
+
+        → Hạn chế của phương pháp dạy hĐc truyĐn thống
+
+        → Nhu cầu cấp thiết đổi mới để nâng cao chất lượng
+
+
+
+2. CƠ SỞ LĐ LUẬN CỦA VẤN ĐỀ (4-5 trang)
+
+
+
+   2.1. Các khái niệm cơ bản liên quan đến đĐ tài
+
+        → Định nghĩa, thuật ngữ then chốt (DIỄN GIẢI theo cách riêng, không copy)
+
         
-   2.2. CÆ¡ sá»Ÿ phÃ¡p lÃ½ (TÃ“M Táº®T TINH THáº¦N, khÃ´ng trÃ­ch nguyÃªn vÄƒn)
-        â†’ Luáº­t GiÃ¡o dá»¥c 2019
-        â†’ ThÃ´ng tÆ° hÆ°á»›ng dáº«n liÃªn quan
-        â†’ CÃ´ng vÄƒn chá»‰ Ä‘áº¡o cá»§a Bá»™/Sá»Ÿ GD&ÄT
+
+   2.2. Cơ sở pháp lý (TÓM TẮT TINH THẦN, không trích nguyên văn)
+
+        → Luật Giáo dục 2019
+
+        → Thông tư hướng dẫn liên quan
+
+        → Công văn chỉ đạo của Bộ/Sở GD&ĐT
+
         
-   2.3. CÆ¡ sá»Ÿ lÃ½ luáº­n giÃ¡o dá»¥c (Chá»n 2-3 lÃ½ thuyáº¿t PHÃ™ Há»¢P)
-        â†’ LÃ½ thuyáº¿t kiáº¿n táº¡o (Piaget, Vygotsky)
-        â†’ LÃ½ thuyáº¿t há»c táº­p qua tráº£i nghiá»‡m (Kolb)
-        â†’ Dáº¡y há»c phÃ¡t triá»ƒn nÄƒng lá»±c
-        [Diá»…n giáº£i LÃ THUYáº¾T + LiÃªn há»‡ Ä‘á» tÃ i táº¡i ${userInfo.school}]
 
-3. THá»°C TRáº NG Váº¤N Äá»€ Cáº¦N NGHIÃŠN Cá»¨U (5-6 trang)
+   2.3. Cơ sở lý luận giáo dục (ChĐn 2-3 lý thuyết PHÙ HỢP)
 
-   3.1. Thá»±c tráº¡ng chung
-        â†’ Äiá»u kiá»‡n CSVC táº¡i ${userInfo.school} (${userInfo.facilities})
-        â†’ Äáº·c Ä‘iá»ƒm Ä‘á»‹a phÆ°Æ¡ng ${userInfo.location}
-        â†’ Xu hÆ°á»›ng dáº¡y há»c hiá»‡n nay
+        → Lý thuyết kiến tạo (Piaget, Vygotsky)
+
+        → Lý thuyết hĐc tập qua trải nghiệm (Kolb)
+
+        → Dạy hĐc phát triển năng lực
+
+        [Diễn giải LĐ THUYẾT + Liên hệ đĐ tài tại ${userInfo.school}]
+
+
+
+3. THỰC TRẠNG VẤN ĐỀ CẦN NGHIÊN CỨU (5-6 trang)
+
+
+
+   3.1. Thực trạng chung
+
+        → ĐiĐu kiện CSVC tại ${userInfo.school} (${userInfo.facilities})
+
+        → Đặc điểm địa phương ${userInfo.location}
+
+        → Xu hướng dạy hĐc hiện nay
+
         
-   3.2. Thá»±c tráº¡ng Ä‘á»‘i vá»›i giÃ¡o viÃªn
-        â†’ Báº£ng kháº£o sÃ¡t giÃ¡o viÃªn (n=X)
-        â†’ Thuáº­n lá»£i - KhÃ³ khÄƒn trong giáº£ng dáº¡y
-        â†’ PhÆ°Æ¡ng phÃ¡p Ä‘ang sá»­ dá»¥ng
+
+   3.2. Thực trạng đối với giáo viên
+
+        → Bảng khảo sát giáo viên (n=X)
+
+        → Thuận lợi - Khó khăn trong giảng dạy
+
+        → Phương pháp đang sử dụng
+
         
-   3.3. Thá»±c tráº¡ng Ä‘á»‘i vá»›i há»c sinh
-        â†’ Báº£ng kháº£o sÃ¡t há»c sinh ${userInfo.grade} (n=Y)  
-        â†’ Káº¿t quáº£ há»c táº­p trÆ°á»›c khi Ã¡p dá»¥ng sÃ¡ng kiáº¿n
-        â†’ ThÃ¡i Ä‘á»™, há»©ng thÃº vá»›i mÃ´n há»c
-        â†’ Nhá»¯ng khÃ³ khÄƒn há»c sinh gáº·p pháº£i
+
+   3.3. Thực trạng đối với hĐc sinh
+
+        → Bảng khảo sát hĐc sinh ${userInfo.grade} (n=Y)  
+
+        → Kết quả hĐc tập trước khi áp dụng sáng kiến
+
+        → Thái độ, hứng thú với môn hĐc
+
+        → Những khó khăn hĐc sinh gặp phải
+
         
-   â†’ PhÃ¢n tÃ­ch nguyÃªn nhÃ¢n (khÃ¡ch quan + chá»§ quan)
 
-4. CÃC GIáº¢I PHÃP, BIá»†N PHÃP THá»°C HIá»†N (12-15 trang - PHáº¦N QUAN TRá»ŒNG NHáº¤T)
+   → Phân tích nguyên nhân (khách quan + chủ quan)
 
-   âš ï¸ CHá»ˆ Äá»€ XUáº¤T 3 GIáº¢I PHÃP TRá»ŒNG TÃ‚M, Äáº¶C Sáº®C NHáº¤T - lÃ m hoÃ n thiá»‡n, chá»‰n chu tá»«ng giáº£i phÃ¡p.
 
-   GIáº¢I PHÃP 1: [TÃªn giáº£i phÃ¡p cá»¥ thá»ƒ, áº¥n tÆ°á»£ng]
+
+4. CĐC GIẢI PHĐP, BIỆN PHĐP THỰC HIỆN (12-15 trang - PHẦN QUAN TRỌNG NHẤT)
+
+
+
+   ⚠Đ CHỈ ĐỀ XUẤT 3 GIẢI PHĐP TRỌNG TÂM, ĐẶC SẮC NHẤT - làm hoàn thiện, chỉn chu từng giải pháp.
+
+
+
+   GIẢI PHĐP 1: [Tên giải pháp cụ thể, ấn tượng]
+
    
-        1.1. Má»¥c tiÃªu cá»§a giáº£i phÃ¡p
-             â†’ Má»¥c tiÃªu vá» kiáº¿n thá»©c
-             â†’ Má»¥c tiÃªu vá» nÄƒng lá»±c
-             â†’ Má»¥c tiÃªu vá» pháº©m cháº¥t
-             
-        1.2. Ná»™i dung vÃ  cÃ¡ch thá»±c hiá»‡n
-             â†’ MÃ´ táº£ chi tiáº¿t báº£n cháº¥t giáº£i phÃ¡p
-             â†’ CÆ¡ sá»Ÿ khoa há»c cá»§a giáº£i phÃ¡p
-             â†’ Äiá»ƒm má»›i, sÃ¡ng táº¡o
-             
-        1.3. Quy trÃ¬nh thá»±c hiá»‡n (5-7 bÆ°á»›c cá»¥ thá»ƒ)
-             BÆ°á»›c 1: [TÃªn bÆ°á»›c] - [Chi tiáº¿t cÃ¡ch lÃ m]
-             BÆ°á»›c 2: [TÃªn bÆ°á»›c] - [Chi tiáº¿t cÃ¡ch lÃ m]
-             BÆ°á»›c 3: [TÃªn bÆ°á»›c] - [Chi tiáº¿t cÃ¡ch lÃ m]
-             BÆ°á»›c 4: [TÃªn bÆ°á»›c] - [Chi tiáº¿t cÃ¡ch lÃ m]
-             BÆ°á»›c 5: [TÃªn bÆ°á»›c] - [Chi tiáº¿t cÃ¡ch lÃ m]
-             
-        1.4. VÃ­ dá»¥ minh há»a cá»¥ thá»ƒ
-             â†’ BÃ i há»c trong SGK ${userInfo.textbook || "hiá»‡n hÃ nh"}
-             â†’ Hoáº¡t Ä‘á»™ng chi tiáº¿t vá»›i thá»i lÆ°á»£ng
-             â†’ Sáº£n pháº©m há»c sinh máº«u
-             
-        1.5. Äiá»u kiá»‡n thá»±c hiá»‡n & LÆ°u Ã½
-             â†’ YÃªu cáº§u vá» CSVC (táº­n dá»¥ng ${userInfo.facilities})
-             â†’ Äiá»u kiá»‡n thÃ nh cÃ´ng
-             â†’ Nhá»¯ng lÆ°u Ã½ quan trá»ng
 
-   GIáº¢I PHÃP 2: [TÃªn giáº£i phÃ¡p cá»¥ thá»ƒ, áº¥n tÆ°á»£ng]
-        [Cáº¥u trÃºc tÆ°Æ¡ng tá»± giáº£i phÃ¡p 1, triá»ƒn khai Ä‘áº§y Ä‘á»§ 5 má»¥c]
+        1.1. Mục tiêu của giải pháp
 
-   GIáº¢I PHÃP 3: [TÃªn giáº£i phÃ¡p cá»¥ thá»ƒ, áº¥n tÆ°á»£ng]
-        [Cáº¥u trÃºc tÆ°Æ¡ng tá»± giáº£i phÃ¡p 1, triá»ƒn khai Ä‘áº§y Ä‘á»§ 5 má»¥c]
+             → Mục tiêu vĐ kiến thức
+
+             → Mục tiêu vĐ năng lực
+
+             → Mục tiêu vĐ phẩm chất
+
+             
+
+        1.2. Nội dung và cách thực hiện
+
+             → Mô tả chi tiết bản chất giải pháp
+
+             → Cơ sở khoa hĐc của giải pháp
+
+             → Điểm mới, sáng tạo
+
+             
+
+        1.3. Quy trình thực hiện (5-7 bước cụ thể)
+
+             Bước 1: [Tên bước] - [Chi tiết cách làm]
+
+             Bước 2: [Tên bước] - [Chi tiết cách làm]
+
+             Bước 3: [Tên bước] - [Chi tiết cách làm]
+
+             Bước 4: [Tên bước] - [Chi tiết cách làm]
+
+             Bước 5: [Tên bước] - [Chi tiết cách làm]
+
+             
+
+        1.4. Ví dụ minh hĐa cụ thể
+
+             → Bài hĐc trong SGK ${userInfo.textbook || "hiện hành"}
+
+             → Hoạt động chi tiết với thĐi lượng
+
+             → Sản phẩm hĐc sinh mẫu
+
+             
+
+        1.5. ĐiĐu kiện thực hiện & Lưu ý
+
+             → Yêu cầu vĐ CSVC (tận dụng ${userInfo.facilities})
+
+             → ĐiĐu kiện thành công
+
+             → Những lưu ý quan trĐng
+
+
+
+   GIẢI PHĐP 2: [Tên giải pháp cụ thể, ấn tượng]
+
+        [Cấu trúc tương tự giải pháp 1, triển khai đầy đủ 5 mục]
+
+
+
+   GIẢI PHĐP 3: [Tên giải pháp cụ thể, ấn tượng]
+
+        [Cấu trúc tương tự giải pháp 1, triển khai đầy đủ 5 mục]
+
    ${(userInfo.numSolutions || 3) > 3 ? `
-   GIáº¢I PHÃP 4: [TÃªn giáº£i phÃ¡p má»Ÿ rá»™ng/nÃ¢ng cao]
-        [Giáº£i phÃ¡p bá»• trá»£, á»©ng dá»¥ng cÃ´ng nghá»‡ nÃ¢ng cao]
+
+   GIẢI PHĐP 4: [Tên giải pháp mở rộng/nâng cao]
+
+        [Giải pháp bổ trợ, ứng dụng công nghệ nâng cao]
+
    ${(userInfo.numSolutions || 3) > 4 ? `
-   GIáº¢I PHÃP 5: [TÃªn giáº£i phÃ¡p má»Ÿ rá»™ng/nÃ¢ng cao]
-        [Giáº£i phÃ¡p phÃ¡t triá»ƒn, má»Ÿ rá»™ng Ä‘á»‘i tÆ°á»£ng Ã¡p dá»¥ng]
+
+   GIẢI PHĐP 5: [Tên giải pháp mở rộng/nâng cao]
+
+        [Giải pháp phát triển, mở rộng đối tượng áp dụng]
+
    ` : ''}
+
    ` : ''}
-   â†’ Má»I LIÃŠN Há»† GIá»®A CÃC GIáº¢I PHÃP (giáº£i thÃ­ch tÃ­nh há»‡ thá»‘ng, logic)
 
-5. Káº¾T QUáº¢ Äáº T ÄÆ¯á»¢C (4-5 trang)
+   → MĐI LIÊN HỆ GIỮA CĐC GIẢI PHĐP (giải thích tính hệ thống, logic)
 
-   5.1. Má»¥c Ä‘Ã­ch thá»±c nghiá»‡m
-        â†’ Kiá»ƒm chá»©ng tÃ­nh hiá»‡u quáº£ cá»§a sÃ¡ng kiáº¿n
-        â†’ ÄÃ¡nh giÃ¡ má»©c Ä‘á»™ phÃ¹ há»£p vá»›i thá»±c tiá»…n
+
+
+5. KẾT QUẢ ĐẠT ĐƯỢC (4-5 trang)
+
+
+
+   5.1. Mục đích thực nghiệm
+
+        → Kiểm chứng tính hiệu quả của sáng kiến
+
+        → Đánh giá mức độ phù hợp với thực tiễn
+
         
-   5.2. Ná»™i dung thá»±c nghiá»‡m
-        â†’ Äá»‘i tÆ°á»£ng: ${userInfo.researchSubjects || "Há»c sinh táº¡i Ä‘Æ¡n vá»‹"}
-        â†’ Thá»i gian: ${userInfo.timeframe || "NÄƒm há»c hiá»‡n táº¡i"}
-        â†’ Pháº¡m vi Ã¡p dá»¥ng
+
+   5.2. Nội dung thực nghiệm
+
+        → Đối tượng: ${userInfo.researchSubjects || "HĐc sinh tại đơn vị"}
+
+        → ThĐi gian: ${userInfo.timeframe || "Năm hĐc hiện tại"}
+
+        → Phạm vi áp dụng
+
         
-   5.3. Tá»• chá»©c thá»±c nghiá»‡m
-        â†’ Báº£ng so sÃ¡nh káº¿t quáº£ TRÆ¯á»šC - SAU (dÃ¹ng sá»‘ liá»‡u láº»: 42.3%, 67.8%)
-        â†’ Biá»ƒu Ä‘á»“ minh há»a
-        â†’ PhÃ¢n tÃ­ch, nháº­n xÃ©t káº¿t quáº£
-        â†’ Ã kiáº¿n pháº£n há»“i tá»« há»c sinh, Ä‘á»“ng nghiá»‡p
 
-6. ÄIá»€U KIá»†N Äá»‚ SÃNG KIáº¾N ÄÆ¯á»¢C NHÃ‚N Rá»˜NG (1-2 trang)
+   5.3. Tổ chức thực nghiệm
 
-   â†’ Äiá»u kiá»‡n vá» CSVC
-   â†’ Äiá»u kiá»‡n vá» nÄƒng lá»±c giÃ¡o viÃªn
-   â†’ Äiá»u kiá»‡n vá» Ä‘á»‘i tÆ°á»£ng há»c sinh
-   â†’ Kháº£ nÄƒng Ã¡p dá»¥ng táº¡i cÃ¡c trÆ°á»ng khÃ¡c
+        → Bảng so sánh kết quả TRƯỚC - SAU (dùng số liệu lẻ: 42.3%, 67.8%)
 
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+        → Biểu đồ minh hĐa
 
-ðŸ“Œ Káº¾T LUáº¬N VÃ€ KHUYáº¾N NGHá»Š (2-3 trang)
+        → Phân tích, nhận xét kết quả
 
-1. Káº¿t luáº­n
-   â†’ TÃ³m táº¯t nhá»¯ng Ä‘Ã³ng gÃ³p chÃ­nh cá»§a sÃ¡ng kiáº¿n
-   â†’ Äiá»ƒm má»›i, Ä‘iá»ƒm sÃ¡ng táº¡o
-   â†’ GiÃ¡ trá»‹ thá»±c tiá»…n
+        → Đ kiến phản hồi từ hĐc sinh, đồng nghiệp
 
-2. Khuyáº¿n nghá»‹  
-   â†’ Vá»›i nhÃ  trÆ°á»ng
-   â†’ Vá»›i tá»• chuyÃªn mÃ´n
-   â†’ Vá»›i giÃ¡o viÃªn
-   â†’ Vá»›i PhÃ²ng/Sá»Ÿ GD&ÄT
-   â†’ HÆ°á»›ng phÃ¡t triá»ƒn tiáº¿p theo
 
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
 
-ðŸ“š TÃ€I LIá»†U THAM KHáº¢O
-   â†’ Liá»‡t kÃª 8-12 tÃ i liá»‡u theo chuáº©n trÃ­ch dáº«n
+6. ĐIỀU KIỆN ĐỂ SĐNG KIẾN ĐƯỢC NHÂN RỘNG (1-2 trang)
 
-ðŸ“Ž PHá»¤ Lá»¤C
-   â†’ Phiáº¿u kháº£o sÃ¡t
-   â†’ GiÃ¡o Ã¡n minh há»a
-   â†’ HÃ¬nh áº£nh hoáº¡t Ä‘á»™ng
-   â†’ Sáº£n pháº©m há»c sinh
+
+
+   → ĐiĐu kiện vĐ CSVC
+
+   → ĐiĐu kiện vĐ năng lực giáo viên
+
+   → ĐiĐu kiện vĐ đối tượng hĐc sinh
+
+   → Khả năng áp dụng tại các trưĐng khác
+
+
+
+ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
+
+
+📌 KẾT LUẬN VÀ KHUYẾN NGHỊ (2-3 trang)
+
+
+
+1. Kết luận
+
+   → Tóm tắt những đóng góp chính của sáng kiến
+
+   → Điểm mới, điểm sáng tạo
+
+   → Giá trị thực tiễn
+
+
+
+2. Khuyến nghị  
+
+   → Với nhà trưĐng
+
+   → Với tổ chuyên môn
+
+   → Với giáo viên
+
+   → Với Phòng/Sở GD&ĐT
+
+   → Hướng phát triển tiếp theo
+
+
+
+ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
+
+
+📚 TÀI LIỆU THAM KHẢO
+
+   → Liệt kê 8-12 tài liệu theo chuẩn trích dẫn
+
+
+
+📎 PHỤ LỤC
+
+   → Phiếu khảo sát
+
+   → Giáo án minh hĐa
+
+   → Hình ảnh hoạt động
+
+   → Sản phẩm hĐc sinh
+
 `)
+
         }
 
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-YÃŠU Cáº¦U DÃ€N Ã(NGáº®N Gá»ŒN - CHá»ˆ Äáº¦U Má»¤C):
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
 
-âš ï¸ QUAN TRá»ŒNG: DÃ n Ã½ pháº£i NGáº®N Gá»ŒN, chá»‰ liá»‡t kÃª CÃC Äáº¦U Má»¤C CHÃNH.
-Ná»™i dung chi tiáº¿t sáº½ Ä‘Æ°á»£c triá»ƒn khai á»Ÿ cÃ¡c bÆ°á»›c viáº¿t sau.
 
-âœ“ ${userInfo.numSolutions || 3} GIáº¢I PHÃP - liá»‡t kÃª TÃŠN giáº£i phÃ¡p, khÃ´ng triá»ƒn khai chi tiáº¿t
-âœ“ Má»—i pháº§n chá»‰ ghi tiÃªu Ä‘á» má»¥c vÃ  cÃ¡c Ã½ chÃ­nh(1 - 2 dÃ²ng má»—i Ã½)
-âœ“ KHÃ”NG viáº¿t Ä‘oáº¡n vÄƒn dÃ i trong dÃ n Ã½
-âœ“ KHÃ”NG triá»ƒn khai chi tiáº¿t ná»™i dung - chá»‰ gá»£i Ã½ hÆ°á»›ng Ä‘i
-âœ“ Gá»£i Ã½ danh sÃ¡ch phá»¥ lá»¥c cáº§n táº¡o(dá»±a trÃªn cÃ¡c giáº£i phÃ¡p)
-âœ“ PhÃ¹ há»£p vá»›i Ä‘áº·c thÃ¹ mÃ´n ${userInfo.subject} vÃ  cáº¥p ${userInfo.level}
-${isHigherEd ? `âœ“ Sá»¬ Dá»¤NG THUáº¬T NGá»® Báº¬C CAO: "sinh viÃªn", "giáº£ng viÃªn", "giÃ¡o trÃ¬nh", "há»c pháº§n", "chuáº©n Ä‘áº§u ra"
-âœ“ Giáº£i phÃ¡p pháº£i cÃ³ CÆ  Sá»ž NGHIÃŠN Cá»¨U KHOA Há»ŒC, trÃ­ch dáº«n APA
-âœ“ Cáº¥u trÃºc cháº·t cháº½ hÆ¡n: cÃ³ Literature Review, Thiáº¿t káº¿ nghiÃªn cá»©u, PhÃ¢n tÃ­ch thá»‘ng kÃª` : ''
+ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
+YÊU CẦU DÀN Đ(NGẮN GỌN - CHỈ ĐẦU MỤC):
+
+ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
+
+
+⚠Đ QUAN TRỌNG: Dàn ý phải NGẮN GỌN, chỉ liệt kê CĐC ĐẦU MỤC CHĐNH.
+
+Nội dung chi tiết sẽ được triển khai ở các bước viết sau.
+
+
+
+✓ ${userInfo.numSolutions || 3} GIẢI PHĐP - liệt kê TÊN giải pháp, không triển khai chi tiết
+
+✓ Mỗi phần chỉ ghi tiêu đĐ mục và các ý chính(1 - 2 dòng mỗi ý)
+
+✓ KHÔNG viết đoạn văn dài trong dàn ý
+
+✓ KHÔNG triển khai chi tiết nội dung - chỉ gợi ý hướng đi
+
+✓ Gợi ý danh sách phụ lục cần tạo(dựa trên các giải pháp)
+
+✓ Phù hợp với đặc thù môn ${userInfo.subject} và cấp ${userInfo.level}
+
+${isHigherEd ? `✓ SỬ DỤNG THUẬT NGỮ BẬC CAO: "sinh viên", "giảng viên", "giáo trình", "hĐc phần", "chuẩn đầu ra"
+
+✓ Giải pháp phải có CƠ SỞ NGHIÊN CỨU KHOA HỌC, trích dẫn APA
+
+✓ Cấu trúc chặt chẽ hơn: có Literature Review, Thiết kế nghiên cứu, Phân tích thống kê` : ''
+
         }
-âœ“ CÃ³ thá»ƒ triá»ƒn khai ngay á»Ÿ cÃ¡c bÆ°á»›c sau
+
+✓ Có thể triển khai ngay ở các bước sau
+
+
 
 ${getPageLimitPrompt() ? `
+
 ${getPageLimitPrompt()}
 
-ðŸ“‹ LÆ¯U Ã KHI Láº¬P DÃ€N Ã Vá»šI GIá»šI Háº N TRANG:
-- DÃ n Ã½ pháº£i TÆ¯Æ NG Xá»¨NG vá»›i sá»‘ trang cho phÃ©p
-- Náº¿u Ã­t trang (â‰¤25): Giáº£m sá»‘ má»¥c con, má»—i giáº£i phÃ¡p chá»‰ 3-4 Ã½ chÃ­nh
-- Náº¿u trung bÃ¬nh (25-40): Sá»‘ má»¥c con vá»«a pháº£i, má»—i giáº£i phÃ¡p 5-6 Ã½ chÃ­nh
-- Náº¿u nhiá»u trang (>40): CÃ³ thá»ƒ má»Ÿ rá»™ng, má»—i giáº£i phÃ¡p 6-8 Ã½ chÃ­nh
-- Äáº£m báº£o dÃ n Ã½ pháº£n Ã¡nh Ä‘Ãºng quy mÃ´ ná»™i dung sáº½ viáº¿t
+
+
+📋 LƯU Đ KHI LẬP DÀN Đ VỚI GIỚI HẠN TRANG:
+
+- Dàn ý phải TƯƠNG XỨNG với số trang cho phép
+
+- Nếu ít trang (≤25): Giảm số mục con, mỗi giải pháp chỉ 3-4 ý chính
+
+- Nếu trung bình (25-40): Số mục con vừa phải, mỗi giải pháp 5-6 ý chính
+
+- Nếu nhiĐu trang (>40): Có thể mở rộng, mỗi giải pháp 6-8 ý chính
+
+- Đảm bảo dàn ý phản ánh đúng quy mô nội dung sẽ viết
+
 ` : ''
+
         }
 
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-Äá»ŠNH Dáº NG Äáº¦U RA:
-â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-
-TrÃ¬nh bÃ y theo cáº¥u trÃºc phÃ¢n cáº¥p rÃµ rÃ ng(Markdown):
-1. TÃŠN PHáº¦N Lá»šN
-1.1.TÃªn má»¥c nhá»
-        â€¢ Ã chi tiáº¿t 1
-        â€¢ Ã chi tiáº¿t 2
 
 
-Sá»­ dá»¥ng icon Ä‘á»ƒ dá»… nhÃ¬n: âœ“ â†’ â€¢ â—‹ â–ª â– 
+ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
 
-QUAN TRá»ŒNG:
-1. HIá»‚N THá»Š "ðŸ“± MENU NAVIGATION" Äáº¦U TIÃŠN(BÆ°á»›c 2: Äang thá»±c hiá»‡n).
-2. Cuá»‘i dÃ n Ã½, hiá»ƒn thá»‹ há»™p thoáº¡i xÃ¡c nháº­n:
-â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-â”‚ âœ… Äá»“ng Ã½ dÃ n Ã½ nÃ y ?            â”‚
-â”‚ âœï¸ Báº¡n cÃ³ thá»ƒ CHá»ˆNH Sá»¬A trá»±c   â”‚
-â”‚    tiáº¿p báº±ng nÃºt "Chá»‰nh sá»­a"    â”‚
-â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+ĐỊNH DẠNG ĐẦU RA:
+
+ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
+
+
+Trình bày theo cấu trúc phân cấp rõ ràng(Markdown):
+
+1. TÊN PHẦN LỚN
+
+1.1.Tên mục nhĐ
+
+        • Đ chi tiết 1
+
+        • Đ chi tiết 2
+
+
+
+
+
+Sử dụng icon để dễ nhìn: ✓ → • ○ ▪ ■
+
+
+
+QUAN TRỌNG:
+
+1. HIỂN THỊ "📱 MENU NAVIGATION" ĐẦU TIÊN(Bước 2: Đang thực hiện).
+
+2. Cuối dàn ý, hiển thị hộp thoại xác nhận:
+
+┌─────────────────────────────────Đ
+
+│ ✅ Đồng ý dàn ý này ?            │
+
+│ ĐĐ Bạn có thể CHỈNH SỬA trực   │
+
+│    tiếp bằng nút "Chỉnh sửa"    │
+
+└─────────────────────────────────┘
+
 `;
 
+
+
       let generatedText = "";
+
       await sendMessageStream(initMessage, (chunk) => {
+
         generatedText += chunk;
+
         setState(prev => ({
+
           ...prev,
+
           fullDocument: generatedText // Initial document is just the outline
+
         }));
+
       });
+
+
 
       setState(prev => ({ ...prev, isStreaming: false }));
 
+
+
     } catch (error: any) {
-      // Thá»­ xoay API key náº¿u lá»—i quota/rate limit
+
+      // Thử xoay API key nếu lỗi quota/rate limit
+
       const errorType = parseApiError(error);
+
       if (errorType === 'QUOTA_EXCEEDED' || errorType === 'RATE_LIMIT') {
+
         const rotation = apiKeyManager.markKeyError(apiKey, errorType);
+
         if (rotation.success && rotation.newKey) {
-          console.log(`ðŸ”„ Tá»± Ä‘á»™ng xoay key: ${rotation.message} `);
+
+          console.log(`🔄 Tự động xoay key: ${rotation.message} `);
+
           setApiKey(rotation.newKey);
+
           localStorage.setItem('gemini_api_key', rotation.newKey);
+
           initializeGeminiChat(rotation.newKey, selectedModel);
-          // Tá»± Ä‘á»™ng thá»­ láº¡i vá»›i key má»›i
+
+          // Tự động thử lại với key mới
+
           setState(prev => ({ ...prev, isStreaming: false, error: null }));
+
           setTimeout(() => startGeneration(), 500);
+
           return;
+
         }
+
       }
+
       setState(prev => ({ ...prev, isStreaming: false, error: error.message || "Failed to generate." }));
+
     }
+
   };
+
+
 
   // Regenerate Outline based on feedback
+
   const regenerateOutline = async () => {
+
     if (!outlineFeedback.trim()) return;
 
+
+
     try {
+
       setState(prev => ({ ...prev, isStreaming: true, error: null, fullDocument: '' }));
 
-      const feedbackMessage = `
-      Báº®T Äáº¦U pháº£n há»“i báº±ng MENU NAVIGATION tráº¡ng thÃ¡i BÆ°á»›c 2(Láº­p DÃ n Ã - Äang thá»±c hiá»‡n).
 
-      Dá»±a trÃªn dÃ n Ã½ Ä‘Ã£ láº­p, ngÆ°á»i dÃ¹ng cÃ³ yÃªu cáº§u chá»‰nh sá»­a sau:
+
+      const feedbackMessage = `
+
+      BẮT ĐẦU phản hồi bằng MENU NAVIGATION trạng thái Bước 2(Lập Dàn Đ - Đang thực hiện).
+
+
+
+      Dựa trên dàn ý đã lập, ngưĐi dùng có yêu cầu chỉnh sửa sau:
+
 "${outlineFeedback}"
+
       
-      HÃ£y viáº¿t láº¡i TOÃ€N Bá»˜ DÃ n Ã½ chi tiáº¿t má»›i Ä‘Ã£ Ä‘Æ°á»£c cáº­p nháº­t theo yÃªu cáº§u trÃªn. 
-      Váº«n Ä‘áº£m báº£o cáº¥u trÃºc chuáº©n SKKN.
+
+      Hãy viết lại TOÀN BỘ Dàn ý chi tiết mới đã được cập nhật theo yêu cầu trên. 
+
+      Vẫn đảm bảo cấu trúc chuẩn SKKN.
+
       
-      LÆ°u Ã½ cÃ¡c quy táº¯c Ä‘á»‹nh dáº¡ng:
-- Xuá»‘ng dÃ²ng sau má»—i cÃ¢u.
-      - TÃ¡ch Ä‘oáº¡n rÃµ rÃ ng.
+
+      Lưu ý các quy tắc định dạng:
+
+- Xuống dòng sau mỗi câu.
+
+      - Tách đoạn rõ ràng.
+
       
-      Káº¿t thÃºc pháº§n dÃ n Ã½, hÃ£y xuá»‘ng dÃ²ng vÃ  hiá»ƒn thá»‹ há»™p thoáº¡i:
-      â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-      â”‚ âœ… Äá»“ng Ã½ dÃ n Ã½ nÃ y ?            â”‚
-      â”‚ âœï¸ Báº¡n cÃ³ thá»ƒ CHá»ˆNH Sá»¬A trá»±c   â”‚
-      â”‚    tiáº¿p báº±ng nÃºt "Chá»‰nh sá»­a"    â”‚
-      â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+
+      Kết thúc phần dàn ý, hãy xuống dòng và hiển thị hộp thoại:
+
+      ┌─────────────────────────────────Đ
+
+      │ ✅ Đồng ý dàn ý này ?            │
+
+      │ ĐĐ Bạn có thể CHỈNH SỬA trực   │
+
+      │    tiếp bằng nút "Chỉnh sửa"    │
+
+      └─────────────────────────────────┘
+
 `;
 
+
+
       let generatedText = "";
+
       await sendMessageStream(feedbackMessage, (chunk) => {
+
         generatedText += chunk;
+
         setState(prev => ({
+
           ...prev,
+
           fullDocument: generatedText
+
         }));
+
       });
 
+
+
       setState(prev => ({ ...prev, isStreaming: false }));
+
       setOutlineFeedback(""); // Clear feedback after sending
 
+
+
     } catch (error: any) {
+
       setState(prev => ({ ...prev, isStreaming: false, error: error.message }));
+
     }
+
   };
 
+
+
   // Generate Next Section
+
   const generateNextSection = async () => {
+
     let currentStepPrompt = "";
+
     let nextStepEnum = GenerationStep.PART_I_II;
-    let shouldAppend = true; // Máº·c Ä‘á»‹nh append ná»™i dung vÃ o fullDocument
+
+    let shouldAppend = true; // Mặc định append nội dung vào fullDocument
+
+
 
     // Logic for OUTLINE step specifically handles manual edits synchronization
+
     if (state.step === GenerationStep.OUTLINE) {
+
       if (isCustomFlow) {
+
         const firstSection = validCustomSections[0];
+
         currentStepPrompt = `
-Báº®T Äáº¦U pháº£n há»“i báº±ng MENU NAVIGATION tráº¡ng thÃ¡i BÆ°á»›c 3(Viáº¿t ${firstSection.title} - Äang thá»±c hiá»‡n).
 
-ÄÃ¢y lÃ  báº£n DÃ€N Ã CHÃNH THá»¨C mÃ  tÃ´i Ä‘Ã£ chá»‘t:
+BẮT ĐẦU phản hồi bằng MENU NAVIGATION trạng thái Bước 3(Viết ${firstSection.title} - Đang thực hiện).
+
+
+
+Đây là bản DÀN Đ CHĐNH THỨC mà tôi đã chốt:
+
 ---
+
   ${state.fullDocument}
+
 ---
 
-  NHIá»†M Vá»¤ TIáº¾P THEO:
-HÃ£y báº¯t tay vÃ o viáº¿t chi tiáº¿t pháº§n Ä‘áº§u tiÃªn theo cáº¥u trÃºc máº«u: ** ${firstSection.title}**.
 
-âš ï¸ BÃM SÃT MáºªU YÃŠU Cáº¦U:
-Pháº§n nÃ y trong máº«u gá»‘c Ä‘Æ°á»£c Ä‘á»‹nh nghÄ©a lÃ : ${firstSection.suggestedContent || "KhÃ´ng cÃ³ hÆ°á»›ng dáº«n phá»¥"}
+
+  NHIỆM VỤ TIẾP THEO:
+
+Hãy bắt tay vào viết chi tiết phần đầu tiên theo cấu trúc mẫu: ** ${firstSection.title}**.
+
+
+
+⚠Đ BĐM SĐT MẪU YÊU CẦU:
+
+Phần này trong mẫu gốc được định nghĩa là: ${firstSection.suggestedContent || "Không có hướng dẫn phụ"}
+
+
 
 ${SOLUTION_MODE_PROMPT}
 
-âš ï¸ LÆ¯U Ã FORMAT:
-- Viáº¿t tá»«ng cÃ¢u xuá»‘ng dÃ²ng riÃªng.
-- TÃ¡ch Ä‘oáº¡n rÃµ rÃ ng.
-- Äáº£m báº£o máº¡ch láº¡c, ngÃ´n ngá»¯ há»c thuáº­t.
-- KHÃ”NG viáº¿t dÃ­nh chá»¯.
+
+
+⚠Đ LƯU Đ FORMAT:
+
+- Viết từng câu xuống dòng riêng.
+
+- Tách đoạn rõ ràng.
+
+- Đảm bảo mạch lạc, ngôn ngữ hĐc thuật.
+
+- KHÔNG viết dính chữ.
+
+
 
   ${getPageLimitPrompt()}
+
 `;
+
         nextStepEnum = 2; // Step 2 is the first dynamic section
+
       } else {
+
         // We inject the CURRENT fullDocument (which might have been edited by user) into the prompt
+
         // This ensures the AI uses the user's finalized outline.
+
         currentStepPrompt = `
-        Báº®T Äáº¦U pháº£n há»“i báº±ng MENU NAVIGATION tráº¡ng thÃ¡i BÆ°á»›c 3(Viáº¿t Pháº§n I & II - Äang thá»±c hiá»‡n).
+
+        BẮT ĐẦU phản hồi bằng MENU NAVIGATION trạng thái Bước 3(Viết Phần I & II - Đang thực hiện).
+
         
-        ÄÃ¢y lÃ  báº£n DÃ€N Ã CHÃNH THá»¨C mÃ  tÃ´i Ä‘Ã£ chá»‘t(tÃ´i cÃ³ thá»ƒ Ä‘Ã£ chá»‰nh sá»­a trá»±c tiáº¿p). 
-        HÃ£y DÃ™NG CHÃNH XÃC Ná»˜I DUNG NÃ€Y Ä‘á»ƒ lÃ m cÆ¡ sá»Ÿ triá»ƒn khai cÃ¡c pháº§n tiáº¿p theo, khÃ´ng tá»± Ã½ thay Ä‘á»•i cáº¥u trÃºc cá»§a nÃ³:
 
---- Báº®T Äáº¦U DÃ€N Ã CHÃNH THá»¨C-- -
+        Đây là bản DÀN Đ CHĐNH THỨC mà tôi đã chốt(tôi có thể đã chỉnh sửa trực tiếp). 
+
+        Hãy DÙNG CHĐNH XĐC NỘI DUNG NÀY để làm cơ sở triển khai các phần tiếp theo, không tự ý thay đổi cấu trúc của nó:
+
+
+
+--- BẮT ĐẦU DÀN Đ CHĐNH THỨC-- -
+
   ${state.fullDocument}
---- Káº¾T THÃšC DÃ€N Ã CHÃNH THá»¨C-- -
 
-  NHIá»†M Vá»¤ TIáº¾P THEO:
-        HÃ£y tiáº¿p tá»¥c BÆ¯á»šC 3: Viáº¿t chi tiáº¿t PHáº¦N I(Äáº·t váº¥n Ä‘á») vÃ  PHáº¦N II(CÆ¡ sá»Ÿ lÃ½ luáº­n).
+--- KẾT THÚC DÀN Đ CHĐNH THỨC-- -
+
+
+
+  NHIỆM VỤ TIẾP THEO:
+
+        Hãy tiếp tục BƯỚC 3: Viết chi tiết PHẦN I(Đặt vấn đĐ) và PHẦN II(Cơ sở lý luận).
+
+
 
   ${INTRO_GUIDE}
 
-${THEORY_GUIDE}
-        
-        âš ï¸ LÆ¯U Ã FORMAT:
-- Viáº¿t tá»«ng cÃ¢u xuá»‘ng dÃ²ng riÃªng.
-        - TÃ¡ch Ä‘oáº¡n rÃµ rÃ ng.
-        - KhÃ´ng viáº¿t dÃ­nh chá»¯.
-        - Menu Navigation: ÄÃ¡nh dáº¥u BÆ°á»›c 2 Ä‘Ã£ xong(âœ…), BÆ°á»›c 3 Ä‘ang lÃ m(ðŸ”µ).
-        
-        Viáº¿t sÃ¢u sáº¯c, há»c thuáº­t, Ä‘Ãºng cáº¥u trÃºc Ä‘Ã£ Ä‘á» ra.LÆ°u Ã½ bÃ¡m sÃ¡t thÃ´ng tin vá» trÆ°á»ng vÃ  Ä‘á»‹a phÆ°Æ¡ng Ä‘Ã£ cung cáº¥p.
 
-        âš ï¸ NHáº®C Láº I THÃ”NG TIN QUAN TRá»ŒNG(Báº®T BUá»˜C BÃM SÃT):
-- Cáº¥p há»c: ${userInfo.level}
-- Khá»‘i lá»›p / Äá»‘i tÆ°á»£ng: ${userInfo.grade}
-- MÃ´n há»c: ${userInfo.subject}
-- TrÆ°á»ng: ${userInfo.school}
-- Äá»‹a phÆ°Æ¡ng: ${userInfo.location}
-        ðŸš« TUYá»†T Äá»I KHÃ”NG dÃ¹ng thÃ´ng tin cá»§a cáº¥p há»c khÃ¡c(THPT, THCS...) náº¿u Ä‘á» tÃ i lÃ  cáº¥p ${userInfo.level} !
-  Má»i vÃ­ dá»¥, sá»‘ liá»‡u, thuáº­t ngá»¯ PHáº¢I phÃ¹ há»£p vá»›i cáº¥p ${userInfo.level}, khá»‘i ${userInfo.grade}.
+
+${THEORY_GUIDE}
+
+        
+
+        ⚠Đ LƯU Đ FORMAT:
+
+- Viết từng câu xuống dòng riêng.
+
+        - Tách đoạn rõ ràng.
+
+        - Không viết dính chữ.
+
+        - Menu Navigation: Đánh dấu Bước 2 đã xong(✅), Bước 3 đang làm(🔵).
+
+        
+
+        Viết sâu sắc, hĐc thuật, đúng cấu trúc đã đĐ ra.Lưu ý bám sát thông tin vĐ trưĐng và địa phương đã cung cấp.
+
+
+
+        ⚠Đ NHẮC LẠI THÔNG TIN QUAN TRỌNG(BẮT BUỘC BĐM SĐT):
+
+- Cấp hĐc: ${userInfo.level}
+
+- Khối lớp / Đối tượng: ${userInfo.grade}
+
+- Môn hĐc: ${userInfo.subject}
+
+- TrưĐng: ${userInfo.school}
+
+- Địa phương: ${userInfo.location}
+
+        🚫 TUYỆT ĐĐI KHÔNG dùng thông tin của cấp hĐc khác(THPT, THCS...) nếu đĐ tài là cấp ${userInfo.level} !
+
+  MĐi ví dụ, số liệu, thuật ngữ PHẢI phù hợp với cấp ${userInfo.level}, khối ${userInfo.grade}.
+
+
 
   ${getPageLimitPrompt()}
-  ${getSectionPagePrompt('Pháº§n I (Äáº·t váº¥n Ä‘á») + Pháº§n II (CÆ¡ sá»Ÿ lÃ½ luáº­n)', 'partI_II')} `;
+
+  ${getSectionPagePrompt('Phần I (Đặt vấn đĐ) + Phần II (Cơ sở lý luận)', 'partI_II')} `;
+
+
 
         nextStepEnum = GenerationStep.PART_I_II;
+
       }
+
     } else if (isCustomFlow && state.step >= 2) {
+
       const sectionIdx = state.step - 2;
+
       const appendixStep = 2 + validCustomSections.length;
 
-      if (sectionIdx < validCustomSections.length - 1) {
-        // CÃ³ pháº§n tiáº¿p theo
-        const nextSection = validCustomSections[sectionIdx + 1];
-        currentStepPrompt = `
-Báº®T Äáº¦U pháº£n há»“i báº±ng MENU NAVIGATION tráº¡ng thÃ¡i BÆ°á»›c ${state.step + 2} (Viáº¿t ${nextSection.title} - Äang thá»±c hiá»‡n).
 
-â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—
-â•‘  THÃ”NG TIN Äá»€ TÃ€I (Báº®T BUá»˜C BÃM SÃT)                 â•‘
-â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-Äá» tÃ i: "${userInfo.topic}"
-MÃ´n: ${userInfo.subject} - Lá»›p: ${userInfo.grade} - Cáº¥p: ${userInfo.level}
-TrÆ°á»ng: ${userInfo.school}, ${userInfo.location}
+
+      if (sectionIdx < validCustomSections.length - 1) {
+
+        // Có phần tiếp theo
+
+        const nextSection = validCustomSections[sectionIdx + 1];
+
+        currentStepPrompt = `
+
+BẮT ĐẦU phản hồi bằng MENU NAVIGATION trạng thái Bước ${state.step + 2} (Viết ${nextSection.title} - Đang thực hiện).
+
+
+
+╔ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ╗
+
+║  THÔNG TIN ĐỀ TÀI (BẮT BUỘC BĐM SĐT)                 ║
+
+╚ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
+ĐĐ tài: "${userInfo.topic}"
+
+Môn: ${userInfo.subject} - Lớp: ${userInfo.grade} - Cấp: ${userInfo.level}
+
+TrưĐng: ${userInfo.school}, ${userInfo.location}
+
 SGK: ${userInfo.textbook}
+
 CSVC: ${userInfo.facilities}
 
-Tiáº¿p tá»¥c viáº¿t chi tiáº¿t ná»™i dung pháº§n tiáº¿p theo cá»§a SKKN: **${nextSection.title}**.
 
-(HÆ°á»›ng dáº«n tá»« máº«u gá»‘c: ${nextSection.suggestedContent || "KhÃ´ng cÃ³ hÆ°á»›ng dáº«n phá»¥"})
+
+Tiếp tục viết chi tiết nội dung phần tiếp theo của SKKN: **${nextSection.title}**.
+
+
+
+(Hướng dẫn từ mẫu gốc: ${nextSection.suggestedContent || "Không có hướng dẫn phụ"})
+
+
 
 ${SOLUTION_MODE_PROMPT}
 
-âš ï¸ Sá» LÆ¯á»¢NG GIáº¢I PHÃP ÄÃƒ CHá»ŒN: ${userInfo.numSolutions || 3} GIáº¢I PHÃP
-Náº¿u pháº§n nÃ y liÃªn quan Ä‘áº¿n mÃ´ táº£ giáº£i phÃ¡p/biá»‡n phÃ¡p, Báº®T BUá»˜C pháº£i viáº¿t Äá»¦ ${userInfo.numSolutions || 3} giáº£i phÃ¡p.
-Má»—i giáº£i phÃ¡p pháº£i cÃ³ Ná»˜I DUNG VÃ€ QUY TRÃŒNH chi tiáº¿t, VÃ Dá»¤ MINH Há»ŒA cá»¥ thá»ƒ.
 
-${state.fullDocument ? `DÃ€N Ã ÄÃƒ DUYá»†T (Báº®T BUá»˜C BÃM SÃT):
+
+⚠Đ SĐ LƯỢNG GIẢI PHĐP ĐÃ CHỌN: ${userInfo.numSolutions || 3} GIẢI PHĐP
+
+Nếu phần này liên quan đến mô tả giải pháp/biện pháp, BẮT BUỘC phải viết ĐỦ ${userInfo.numSolutions || 3} giải pháp.
+
+Mỗi giải pháp phải có NỘI DUNG VÀ QUY TRÌNH chi tiết, VĐ DỤ MINH HỌA cụ thể.
+
+
+
+${state.fullDocument ? `DÀN Đ ĐÃ DUYỆT (BẮT BUỘC BĐM SĐT):
+
 ${state.fullDocument.substring(0, 2000)}
 
-âš ï¸ TÃªn giáº£i phÃ¡p, cáº¥u trÃºc PHáº¢I TRÃ™NG KHá»šP vá»›i dÃ n Ã½ trÃªn.` : ''}
+
+
+⚠Đ Tên giải pháp, cấu trúc PHẢI TRÙNG KHỚP với dàn ý trên.` : ''}
+
+
 
 ${NATURAL_WRITING_TECHNIQUES}
 
-âš ï¸ LÆ¯U Ã FORMAT:
-- Viáº¿t tá»«ng cÃ¢u xuá»‘ng dÃ²ng riÃªng.
-- TÃ¡ch Ä‘oáº¡n rÃµ rÃ ng.
-- LiÃªn káº¿t logic vá»›i pháº§n trÆ°á»›c Ä‘Ã³.
-- KHÃ”NG viáº¿t dÃ­nh chá»¯.
+
+
+⚠Đ LƯU Đ FORMAT:
+
+- Viết từng câu xuống dòng riêng.
+
+- Tách đoạn rõ ràng.
+
+- Liên kết logic với phần trước đó.
+
+- KHÔNG viết dính chữ.
+
+
 
   ${getPageLimitPrompt()}
+
 `;
+
         nextStepEnum = state.step + 1;
+
       } else if (sectionIdx === validCustomSections.length - 1) {
-        // Xong section cuá»‘i -> Sang Completed
+
+        // Xong section cuối -> Sang Completed
+
         currentStepPrompt = `
-âœ… SKKN ÄÃƒ HOÃ€N THÃ€NH!
 
-Báº¡n Ä‘Ã£ viáº¿t xong toÃ n bá»™ ná»™i dung chÃ­nh cá»§a SKKN theo Ä‘Ãºng cáº¥u trÃºc máº«u.
+✅ SKKN ĐÃ HOÀN THÀNH!
 
-ðŸ“Œ BÃ‚Y GIá»œ Báº N CÃ“ THá»‚:
-1. Xuáº¥t file Word Ä‘á»ƒ chá»‰nh sá»­a chi tiáº¿t
-2. Táº¡o PHá»¤ Lá»¤C chi tiáº¿t báº±ng nÃºt "Táº O PHá»¤ Lá»¤C"
+
+
+Bạn đã viết xong toàn bộ nội dung chính của SKKN theo đúng cấu trúc mẫu.
+
+
+
+📌 BÂY GIỜ BẠN CÓ THỂ:
+
+1. Xuất file Word để chỉnh sửa chi tiết
+
+2. Tạo PHỤ LỤC chi tiết bằng nút "TẠO PHỤ LỤC"
+
   `;
+
         nextStepEnum = appendixStep + 1; // Completed step
+
         shouldAppend = false;
+
       }
+
     } else {
+
       // Standard flow for other steps
+
       const nextStepMap: Record<number, { prompt: string, nextStep: GenerationStep, skipAppend?: boolean }> = {
+
         [GenerationStep.PART_I_II]: {
+
           prompt: `
-              Báº®T Äáº¦U pháº£n há»“i báº±ng MENU NAVIGATION tráº¡ng thÃ¡i BÆ°á»›c 4(Viáº¿t Pháº§n III - Äang thá»±c hiá»‡n).
+
+              BẮT ĐẦU phản hồi bằng MENU NAVIGATION trạng thái Bước 4(Viết Phần III - Đang thực hiện).
+
+
 
   ${REALITY_GUIDE}
 
-              Tiáº¿p tá»¥c BÆ¯á»šC 3(tiáº¿p): Viáº¿t chi tiáº¿t PHáº¦N III(Thá»±c tráº¡ng váº¥n Ä‘á»). 
-              Nhá»› táº¡o báº£ng sá»‘ liá»‡u kháº£o sÃ¡t giáº£ Ä‘á»‹nh logic phÃ¹ há»£p vá»›i Ä‘á»‘i tÆ°á»£ng nghiÃªn cá»©u lÃ : ${userInfo.researchSubjects || "Há»c sinh"}.
-              PhÃ¢n tÃ­ch nguyÃªn nhÃ¢n vÃ  thá»±c tráº¡ng táº¡i ${userInfo.school}, ${userInfo.location} vÃ  Ä‘iá»u kiá»‡n CSVC thá»±c táº¿: ${userInfo.facilities}.
+
+
+              Tiếp tục BƯỚC 3(tiếp): Viết chi tiết PHẦN III(Thực trạng vấn đĐ). 
+
+              Nhớ tạo bảng số liệu khảo sát giả định logic phù hợp với đối tượng nghiên cứu là: ${userInfo.researchSubjects || "HĐc sinh"}.
+
+              Phân tích nguyên nhân và thực trạng tại ${userInfo.school}, ${userInfo.location} và điĐu kiện CSVC thực tế: ${userInfo.facilities}.
+
               
-              âš ï¸ NHáº®C Láº I: ÄÃ¢y lÃ  SKKN cáº¥p ${userInfo.level}, khá»‘i ${userInfo.grade}, mÃ´n ${userInfo.subject}.
-              Má»i ná»™i dung, vÃ­ dá»¥, sá»‘ liá»‡u, Ä‘á»‘i tÆ°á»£ng kháº£o sÃ¡t PHáº¢I phÃ¹ há»£p vá»›i cáº¥p ${userInfo.level}.
-              ðŸš« TUYá»†T Äá»I KHÃ”NG nháº§m sang THPT, THCS hoáº·c cáº¥p há»c khÃ¡c náº¿u Ä‘á» tÃ i khÃ´ng thuá»™c cáº¥p Ä‘Ã³!
+
+              ⚠Đ NHẮC LẠI: Đây là SKKN cấp ${userInfo.level}, khối ${userInfo.grade}, môn ${userInfo.subject}.
+
+              MĐi nội dung, ví dụ, số liệu, đối tượng khảo sát PHẢI phù hợp với cấp ${userInfo.level}.
+
+              🚫 TUYỆT ĐĐI KHÔNG nhầm sang THPT, THCS hoặc cấp hĐc khác nếu đĐ tài không thuộc cấp đó!
+
               
-              âš ï¸ LÆ¯U Ã FORMAT:
-- Viáº¿t tá»«ng cÃ¢u xuá»‘ng dÃ²ng riÃªng.
-              - TÃ¡ch Ä‘oáº¡n rÃµ rÃ ng.
-              - Báº£ng sá»‘ liá»‡u pháº£i tuÃ¢n thá»§ format Markdown chuáº©n: | TiÃªu Ä‘á» | Sá»‘ liá»‡u |.
+
+              ⚠Đ LƯU Đ FORMAT:
+
+- Viết từng câu xuống dòng riêng.
+
+              - Tách đoạn rõ ràng.
+
+              - Bảng số liệu phải tuân thủ format Markdown chuẩn: | Tiêu đĐ | Số liệu |.
+
               
-              ðŸ–¼ï¸ Gá»¢I Ã HÃŒNH áº¢NH MINH Há»ŒA(Báº®T BUá»˜C):
-              Trong pháº§n Thá»±c tráº¡ng, hÃ£y gá»£i Ã½ 1 - 2 vá»‹ trÃ­ nÃªn Ä‘áº·t hÃ¬nh áº£nh minh há»a vá»›i format:
-              ** [ðŸ–¼ï¸ Gá»¢I Ã HÃŒNH áº¢NH: MÃ´ táº£ chi tiáº¿t hÃ¬nh áº£nh cáº§n chá»¥p / táº¡o - Äáº·t sau pháº§n nÃ o] **
-  VÃ­ dá»¥:
-              ** [ðŸ–¼ï¸ Gá»¢I Ã HÃŒNH áº¢NH: Biá»ƒu Ä‘á»“ cá»™t thá»ƒ hiá»‡n tá»‰ lá»‡ há»c sinh yáº¿u / trung bÃ¬nh / khÃ¡ / giá»i trÆ°á»›c khi Ã¡p dá»¥ng sÃ¡ng kiáº¿n - Äáº·t sau báº£ng kháº£o sÃ¡t Ä‘áº§u nÄƒm] **
-              ** [ðŸ–¼ï¸ Gá»¢I Ã HÃŒNH áº¢NH: áº¢nh chá»¥p thá»±c táº¿ lá»›p há»c / phÃ²ng thÃ­ nghiá»‡m táº¡i ${userInfo.school} - Äáº·t pháº§n Ä‘áº·c Ä‘iá»ƒm nhÃ  trÆ°á»ng] **
+
+              🖼Đ GỢI Đ HÌNH ẢNH MINH HỌA(BẮT BUỘC):
+
+              Trong phần Thực trạng, hãy gợi ý 1 - 2 vị trí nên đặt hình ảnh minh hĐa với format:
+
+              ** [🖼Đ GỢI Đ HÌNH ẢNH: Mô tả chi tiết hình ảnh cần chụp / tạo - Đặt sau phần nào] **
+
+  Ví dụ:
+
+              ** [🖼Đ GỢI Đ HÌNH ẢNH: Biểu đồ cột thể hiện tỉ lệ hĐc sinh yếu / trung bình / khá / giĐi trước khi áp dụng sáng kiến - Đặt sau bảng khảo sát đầu năm] **
+
+              ** [🖼Đ GỢI Đ HÌNH ẢNH: Ảnh chụp thực tế lớp hĐc / phòng thí nghiệm tại ${userInfo.school} - Đặt phần đặc điểm nhà trưĐng] **
+
+
 
   ${getPageLimitPrompt()}
-  ${getSectionPagePrompt('Pháº§n III (Thá»±c tráº¡ng váº¥n Ä‘á»)', 'partIII')} `,
+
+  ${getSectionPagePrompt('Phần III (Thực trạng vấn đĐ)', 'partIII')} `,
+
           nextStep: GenerationStep.PART_III
+
         },
+
         [GenerationStep.PART_III]: {
+
           // ULTRA MODE INJECTION FOR PART IV START
+
           prompt: `
-              Báº®T Äáº¦U pháº£n há»“i báº±ng MENU NAVIGATION tráº¡ng thÃ¡i BÆ°á»›c 5(Viáº¿t Pháº§n IV - Äang thá»±c hiá»‡n).
+
+              BẮT ĐẦU phản hồi bằng MENU NAVIGATION trạng thái Bước 5(Viết Phần IV - Đang thực hiện).
+
+
 
   ${SOLUTION_MODE_PROMPT}
+
       
-              â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-              ðŸš€ THá»°C THI NHIá»†M Vá»¤(PHáº¦N IV - GIáº¢I PHÃP 1)
-              â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+
+              ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
+              🚀 THỰC THI NHIỆM VỤ(PHẦN IV - GIẢI PHĐP 1)
+
+              ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
               
-              ThÃ´ng tin Ä‘á» tÃ i: "${userInfo.topic}"
-MÃ´n: ${userInfo.subject} - Lá»›p: ${userInfo.grade} - Cáº¥p: ${userInfo.level}
-TrÆ°á»ng: ${userInfo.school}, ${userInfo.location}
+
+              Thông tin đĐ tài: "${userInfo.topic}"
+
+Môn: ${userInfo.subject} - Lớp: ${userInfo.grade} - Cấp: ${userInfo.level}
+
+TrưĐng: ${userInfo.school}, ${userInfo.location}
+
 SGK: ${userInfo.textbook}
-              CÃ´ng nghá»‡ / AI: ${userInfo.applyAI}
-              CSVC hiá»‡n cÃ³: ${userInfo.facilities}
-              Trá»ng tÃ¢m Ä‘á» tÃ i: ${userInfo.focus || 'Theo dÃ n Ã½ Ä‘Ã£ duyá»‡t'}
+
+              Công nghệ / AI: ${userInfo.applyAI}
+
+              CSVC hiện có: ${userInfo.facilities}
+
+              TrĐng tâm đĐ tài: ${userInfo.focus || 'Theo dàn ý đã duyệt'}
+
               
-              â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—
-              â•‘  ðŸš¨ DÃ€N Ã ÄÃƒ DUYá»†T - Báº®T BUá»˜C BÃM SÃT ðŸš¨          â•‘
-              â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-              ${state.fullDocument ? `DÆ°á»›i Ä‘Ã¢y lÃ  DÃ€N Ã ÄÃƒ ÄÆ¯á»¢C DUYá»†T. Giáº£i phÃ¡p 1 PHáº¢I viáº¿t ÄÃšNG theo tÃªn vÃ  ná»™i dung Ä‘Ã£ ghi trong dÃ n Ã½:
+
+              ╔ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ╗
+
+              ║  🚨 DÀN Đ ĐÃ DUYỆT - BẮT BUỘC BĐM SĐT 🚨          ║
+
+              ╚ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
+              ${state.fullDocument ? `Dưới đây là DÀN Đ ĐÃ ĐƯỢC DUYỆT. Giải pháp 1 PHẢI viết ĐÚNG theo tên và nội dung đã ghi trong dàn ý:
+
               
+
 ${state.fullDocument.substring(0, 3000)}
 
-âš ï¸ Báº®T BUá»˜C:
-- TÃªn giáº£i phÃ¡p PHáº¢I TRÃ™NG KHá»šP vá»›i tÃªn giáº£i phÃ¡p trong dÃ n Ã½ trÃªn.
-- Ná»™i dung giáº£i phÃ¡p PHáº¢I xoay quanh Ä‘á» tÃ i "${userInfo.topic}" vÃ  phÃ¹ há»£p vá»›i mÃ´n ${userInfo.subject}, cáº¥p ${userInfo.level}.
-- TUYá»†T Äá»I KHÃ”NG viáº¿t giáº£i phÃ¡p láº¡c Ä‘á» hoáº·c khÃ´ng liÃªn quan Ä‘áº¿n Ä‘á» tÃ i.
-- Má»i vÃ­ dá»¥, bÃ i há»c minh há»a pháº£i thuá»™c mÃ´n ${userInfo.subject}, khá»‘i ${userInfo.grade}.` : 'ChÆ°a cÃ³ dÃ n Ã½ - viáº¿t theo Ä‘á» tÃ i.'}
+
+
+⚠Đ BẮT BUỘC:
+
+- Tên giải pháp PHẢI TRÙNG KHỚP với tên giải pháp trong dàn ý trên.
+
+- Nội dung giải pháp PHẢI xoay quanh đĐ tài "${userInfo.topic}" và phù hợp với môn ${userInfo.subject}, cấp ${userInfo.level}.
+
+- TUYỆT ĐĐI KHÔNG viết giải pháp lạc đĐ hoặc không liên quan đến đĐ tài.
+
+- MĐi ví dụ, bài hĐc minh hĐa phải thuộc môn ${userInfo.subject}, khối ${userInfo.grade}.` : 'Chưa có dàn ý - viết theo đĐ tài.'}
+
               
-              YÃŠU Cáº¦U:
-              HÃ£y viáº¿t chi tiáº¿t GIáº¢I PHÃP 1(Giáº£i phÃ¡p trá»ng tÃ¢m nháº¥t) tuÃ¢n thá»§ nghiÃªm ngáº·t 10 NGUYÃŠN Táº®C VÃ€NG.
-              Giáº£i phÃ¡p pháº£i kháº£ thi vá»›i Ä‘iá»u kiá»‡n CSVC: ${userInfo.facilities}.
+
+              YÊU CẦU:
+
+              Hãy viết chi tiết GIẢI PHĐP 1(Giải pháp trĐng tâm nhất) tuân thủ nghiêm ngặt 10 NGUYÊN TẮC VÀNG.
+
+              Giải pháp phải khả thi với điĐu kiện CSVC: ${userInfo.facilities}.
+
               
-              QUAN TRá»ŒNG: TuÃ¢n thá»§ "YÃŠU Cáº¦U Äá»ŠNH Dáº NG OUTPUT" vá»«a cung cáº¥p:
-1. Xuá»‘ng dÃ²ng sau má»—i cÃ¢u.
-              2. Xuá»‘ng 2 dÃ²ng sau má»—i Ä‘oáº¡n.
-              3. Sá»­ dá»¥ng Format "Káº¾T THÃšC GIáº¢I PHÃP" á»Ÿ cuá»‘i.
+
+              QUAN TRỌNG: Tuân thủ "YÊU CẦU ĐỊNH DẠNG OUTPUT" vừa cung cấp:
+
+1. Xuống dòng sau mỗi câu.
+
+              2. Xuống 2 dòng sau mỗi đoạn.
+
+              3. Sử dụng Format "KẾT THÚC GIẢI PHĐP" ở cuối.
+
               
-              LÆ°u Ã½ Ä‘áº·c biá»‡t: Pháº£i cÃ³ VÃ Dá»¤ MINH Há»ŒA(GiÃ¡o Ã¡n / Hoáº¡t Ä‘á»™ng) cá»¥ thá»ƒ theo SGK ${userInfo.textbook}.
-              Menu Navigation: ÄÃ¡nh dáº¥u BÆ°á»›c 5 Ä‘ang lÃ m(ðŸ”µ).
+
+              Lưu ý đặc biệt: Phải có VĐ DỤ MINH HỌA(Giáo án / Hoạt động) cụ thể theo SGK ${userInfo.textbook}.
+
+              Menu Navigation: Đánh dấu Bước 5 đang làm(🔵).
+
               
-              ðŸ–¼ï¸ Gá»¢I Ã HÃŒNH áº¢NH MINH Há»ŒA(Báº¯T BUá»˜C):
-              Trong GIáº¢I PHÃP 1, hÃ£y gá»£i Ã½ 1 - 2 vá»‹ trÃ­ nÃªn Ä‘áº·t hÃ¬nh áº£nh minh há»a vá»›i format:
-              ** [ðŸ–¼ï¸ Gá»¢I Ã HÃŒNH áº¢NH: MÃ´ táº£ chi tiáº¿t hÃ¬nh áº£nh - Äáº·t sau pháº§n nÃ o] **
-  VÃ­ dá»¥ gá»£i Ã½ cho Giáº£i phÃ¡p 1:
-              ** [ðŸ–¼ï¸ Gá»¢I Ã HÃŒNH áº¢NH: SÆ¡ Ä‘á»“ quy trÃ¬nh thá»±c hiá»‡n giáº£i phÃ¡p(5 - 7 bÆ°á»›c) dáº¡ng flowchart - Äáº·t Ä‘áº§u má»¥c Quy trÃ¬nh thá»±c hiá»‡n] **
-              ** [ðŸ–¼ï¸ Gá»¢I Ã HÃŒNH áº¢NH: áº¢nh chá»¥p há»c sinh thá»±c hiá»‡n hoáº¡t Ä‘á»™ng / áº¢nh miá»n há»a hoáº¡t Ä‘á»™ng máº«u - Äáº·t trong pháº§n VÃ­ dá»¥ minh há»a] **
+
+              🖼Đ GỢI Đ HÌNH ẢNH MINH HỌA(BắT BUỘC):
+
+              Trong GIẢI PHĐP 1, hãy gợi ý 1 - 2 vị trí nên đặt hình ảnh minh hĐa với format:
+
+              ** [🖼Đ GỢI Đ HÌNH ẢNH: Mô tả chi tiết hình ảnh - Đặt sau phần nào] **
+
+  Ví dụ gợi ý cho Giải pháp 1:
+
+              ** [🖼Đ GỢI Đ HÌNH ẢNH: Sơ đồ quy trình thực hiện giải pháp(5 - 7 bước) dạng flowchart - Đặt đầu mục Quy trình thực hiện] **
+
+              ** [🖼Đ GỢI Đ HÌNH ẢNH: Ảnh chụp hĐc sinh thực hiện hoạt động / Ảnh miĐn hĐa hoạt động mẫu - Đặt trong phần Ví dụ minh hĐa] **
+
+
 
   ${getPageLimitPrompt()}
-  ${getSectionPagePrompt('Giáº£i phÃ¡p 1', 'perSolution')} `,
+
+  ${getSectionPagePrompt('Giải pháp 1', 'perSolution')} `,
+
           nextStep: GenerationStep.PART_IV_SOL1
+
         },
+
         [GenerationStep.PART_IV_SOL1]: {
-          // Sau khi viáº¿t xong GP1 â†’ Chuyá»ƒn sang REVIEW GP1 (KHÃ”NG viáº¿t GP2 á»Ÿ Ä‘Ã¢y)
-          prompt: `âœ… HOÃ€N THÃ€NH GIáº¢I PHÃP 1. Vui lÃ²ng xem xÃ©t vÃ  duyá»‡t trÆ°á»›c khi tiáº¿p tá»¥c.`,
-          nextStep: GenerationStep.PART_IV_SOL1_REVIEW, // Chuyá»ƒn sang review GP1
-          skipAppend: true // KhÃ´ng append vÃ o fullDocument Ä‘á»ƒ trÃ¡nh láº·p ná»™i dung
+
+          // Sau khi viết xong GP1 → Chuyển sang REVIEW GP1 (KHÔNG viết GP2 ở đây)
+
+          prompt: `✅ HOÀN THÀNH GIẢI PHĐP 1. Vui lòng xem xét và duyệt trước khi tiếp tục.`,
+
+          nextStep: GenerationStep.PART_IV_SOL1_REVIEW, // Chuyển sang review GP1
+
+          skipAppend: true // Không append vào fullDocument để tránh lặp nội dung
+
         },
-        // GP1 Review â†’ GP2
+
+        // GP1 Review → GP2
+
         [GenerationStep.PART_IV_SOL1_REVIEW]: {
-          prompt: `
-              Báº®T Äáº¦U pháº£n há»“i báº±ng MENU NAVIGATION tráº¡ng thÃ¡i(Viáº¿t Giáº£i phÃ¡p 2 - Äang thá»±c hiá»‡n).
 
-              Tiáº¿p tá»¥c giá»¯ vá»¯ng vai trÃ² CHUYÃŠN GIA GIÃO Dá»¤C(ULTRA MODE).
+          prompt: `
+
+              BẮT ĐẦU phản hồi bằng MENU NAVIGATION trạng thái(Viết Giải pháp 2 - Đang thực hiện).
+
+
+
+              Tiếp tục giữ vững vai trò CHUYÊN GIA GIĐO DỤC(ULTRA MODE).
+
               
-              Nhiá»‡m vá»¥: Viáº¿t chi tiáº¿t GIáº¢I PHÃP 2 cho Ä‘á» tÃ i: "${userInfo.topic}".
-              MÃ´n: ${userInfo.subject} - Lá»›p: ${userInfo.grade} - Cáº¥p: ${userInfo.level}
-              TrÆ°á»ng: ${userInfo.school}, ${userInfo.location}
+
+              Nhiệm vụ: Viết chi tiết GIẢI PHĐP 2 cho đĐ tài: "${userInfo.topic}".
+
+              Môn: ${userInfo.subject} - Lớp: ${userInfo.grade} - Cấp: ${userInfo.level}
+
+              TrưĐng: ${userInfo.school}, ${userInfo.location}
+
               
-              â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—
-              â•‘  ðŸš¨ NHáº®C Láº I DÃ€N Ã - Báº®T BUá»˜C BÃM SÃT ðŸš¨          â•‘
-              â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-              âš ï¸ Báº®T BUá»˜C: TÃªn GIáº¢I PHÃP 2 PHáº¢I TRÃ™NG KHá»šP vá»›i tÃªn giáº£i phÃ¡p 2 trong dÃ n Ã½ Ä‘Ã£ duyá»‡t á»Ÿ trÃªn.
-              Ná»™i dung PHáº¢I xoay quanh Ä‘á» tÃ i "${userInfo.topic}", phÃ¹ há»£p mÃ´n ${userInfo.subject}.
-              TUYá»†T Äá»I KHÃ”NG viáº¿t láº¡c Ä‘á» hoáº·c chuyá»ƒn sang chá»§ Ä‘á» khÃ¡c.
+
+              ╔ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ╗
+
+              ║  🚨 NHẮC LẠI DÀN Đ - BẮT BUỘC BĐM SĐT 🚨          ║
+
+              ╚ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
+              ⚠Đ BẮT BUỘC: Tên GIẢI PHĐP 2 PHẢI TRÙNG KHỚP với tên giải pháp 2 trong dàn ý đã duyệt ở trên.
+
+              Nội dung PHẢI xoay quanh đĐ tài "${userInfo.topic}", phù hợp môn ${userInfo.subject}.
+
+              TUYỆT ĐĐI KHÔNG viết lạc đĐ hoặc chuyển sang chủ đĐ khác.
+
               
-              YÃªu cáº§u:
-1. Ná»™i dung Ä‘á»™c Ä‘Ã¡o, KHÃ”NG trÃ¹ng láº·p vá»›i Giáº£i phÃ¡p 1.
-2. Táº­n dá»¥ng tá»‘i Ä‘a CSVC: ${userInfo.facilities}.
-3. Báº®T BUá»˜C TUÃ‚N THá»¦ FORMAT "YÃŠU Cáº¦U Äá»ŠNH Dáº NG OUTPUT":
-- Xuá»‘ng dÃ²ng sau má»—i cÃ¢u.
-                 - Xuá»‘ng 2 dÃ²ng sau má»—i Ä‘oáº¡n.
-                 - CÃ³ khung "Káº¾T THÃšC GIáº¢I PHÃP" á»Ÿ cuá»‘i.
-              4. Pháº£i cÃ³ VÃ Dá»¤ MINH Há»ŒA cá»¥ thá»ƒ theo SGK ${userInfo.textbook}.
+
+              Yêu cầu:
+
+1. Nội dung độc đáo, KHÔNG trùng lặp với Giải pháp 1.
+
+2. Tận dụng tối đa CSVC: ${userInfo.facilities}.
+
+3. BẮT BUỘC TUÂN THỦ FORMAT "YÊU CẦU ĐỊNH DẠNG OUTPUT":
+
+- Xuống dòng sau mỗi câu.
+
+                 - Xuống 2 dòng sau mỗi đoạn.
+
+                 - Có khung "KẾT THÚC GIẢI PHĐP" ở cuối.
+
+              4. Phải có VĐ DỤ MINH HỌA cụ thể theo SGK ${userInfo.textbook}.
+
               
-              ðŸ–¼ï¸ Gá»¢I Ã HÃŒNH áº¢NH MINH Há»ŒA(Báº®T BUá»˜C):
-              Trong GIáº¢I PHÃP 2, hÃ£y gá»£i Ã½ 1 - 2 vá»‹ trÃ­ nÃªn Ä‘áº·t hÃ¬nh áº£nh minh há»a vá»›i format:
-              ** [ðŸ–¼ï¸ Gá»¢I Ã HÃŒNH áº¢NH: MÃ´ táº£ chi tiáº¿t hÃ¬nh áº£nh - Äáº·t sau pháº§n nÃ o] **
+
+              🖼Đ GỢI Đ HÌNH ẢNH MINH HỌA(BẮT BUỘC):
+
+              Trong GIẢI PHĐP 2, hãy gợi ý 1 - 2 vị trí nên đặt hình ảnh minh hĐa với format:
+
+              ** [🖼Đ GỢI Đ HÌNH ẢNH: Mô tả chi tiết hình ảnh - Đặt sau phần nào] **
+
+
 
   ${getPageLimitPrompt()}
-  ${getSectionPagePrompt('Giáº£i phÃ¡p 2', 'perSolution')} `,
+
+  ${getSectionPagePrompt('Giải pháp 2', 'perSolution')} `,
+
           nextStep: GenerationStep.PART_IV_SOL2
+
         },
-        // GP2 â†’ GP2 Review (KHÃ”NG viáº¿t GP3 á»Ÿ Ä‘Ã¢y)
+
+        // GP2 → GP2 Review (KHÔNG viết GP3 ở đây)
+
         [GenerationStep.PART_IV_SOL2]: {
-          prompt: `âœ… HOÃ€N THÃ€NH GIáº¢I PHÃP 2. Vui lÃ²ng xem xÃ©t vÃ  duyá»‡t trÆ°á»›c khi tiáº¿p tá»¥c.`,
+
+          prompt: `✅ HOÀN THÀNH GIẢI PHĐP 2. Vui lòng xem xét và duyệt trước khi tiếp tục.`,
+
           nextStep: GenerationStep.PART_IV_SOL2_REVIEW,
-          skipAppend: true // KhÃ´ng append vÃ o fullDocument Ä‘á»ƒ trÃ¡nh láº·p ná»™i dung
+
+          skipAppend: true // Không append vào fullDocument để tránh lặp nội dung
+
         },
-        // GP2 Review â†’ GP3 (Viáº¿t GP3 sau khi approve GP2)
+
+        // GP2 Review → GP3 (Viết GP3 sau khi approve GP2)
+
         [GenerationStep.PART_IV_SOL2_REVIEW]: {
-          prompt: `
-              Báº®T Äáº¦U pháº£n há»“i báº±ng MENU NAVIGATION tráº¡ng thÃ¡i(Viáº¿t Giáº£i phÃ¡p 3 - Äang thá»±c hiá»‡n).
 
-              Tiáº¿p tá»¥c giá»¯ vá»¯ng vai trÃ² CHUYÃŠN GIA GIÃO Dá»¤C(ULTRA MODE).
+          prompt: `
+
+              BẮT ĐẦU phản hồi bằng MENU NAVIGATION trạng thái(Viết Giải pháp 3 - Đang thực hiện).
+
+
+
+              Tiếp tục giữ vững vai trò CHUYÊN GIA GIĐO DỤC(ULTRA MODE).
+
               
-              Nhiá»‡m vá»¥: Viáº¿t chi tiáº¿t GIáº¢I PHÃP 3 cho Ä‘á» tÃ i: "${userInfo.topic}".
-              MÃ´n: ${userInfo.subject} - Lá»›p: ${userInfo.grade} - Cáº¥p: ${userInfo.level}
-              TrÆ°á»ng: ${userInfo.school}, ${userInfo.location}
+
+              Nhiệm vụ: Viết chi tiết GIẢI PHĐP 3 cho đĐ tài: "${userInfo.topic}".
+
+              Môn: ${userInfo.subject} - Lớp: ${userInfo.grade} - Cấp: ${userInfo.level}
+
+              TrưĐng: ${userInfo.school}, ${userInfo.location}
+
               
-              â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—
-              â•‘  ðŸš¨ NHáº®C Láº I DÃ€N Ã - Báº®T BUá»˜C BÃM SÃT ðŸš¨          â•‘
-              â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-              âš ï¸ Báº®T BUá»˜C: TÃªn GIáº¢I PHÃP 3 PHáº¢I TRÃ™NG KHá»šP vá»›i tÃªn giáº£i phÃ¡p 3 trong dÃ n Ã½ Ä‘Ã£ duyá»‡t.
-              Ná»™i dung PHáº¢I xoay quanh Ä‘á» tÃ i "${userInfo.topic}", phÃ¹ há»£p mÃ´n ${userInfo.subject}.
-              TUYá»†T Äá»I KHÃ”NG viáº¿t láº¡c Ä‘á» hoáº·c chuyá»ƒn sang chá»§ Ä‘á» khÃ¡c.
+
+              ╔ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ╗
+
+              ║  🚨 NHẮC LẠI DÀN Đ - BẮT BUỘC BĐM SĐT 🚨          ║
+
+              ╚ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
+              ⚠Đ BẮT BUỘC: Tên GIẢI PHĐP 3 PHẢI TRÙNG KHỚP với tên giải pháp 3 trong dàn ý đã duyệt.
+
+              Nội dung PHẢI xoay quanh đĐ tài "${userInfo.topic}", phù hợp môn ${userInfo.subject}.
+
+              TUYỆT ĐĐI KHÔNG viết lạc đĐ hoặc chuyển sang chủ đĐ khác.
+
               
-              YÃªu cáº§u:
-1. Ná»™i dung Ä‘á»™c Ä‘Ã¡o, KHÃ”NG trÃ¹ng láº·p vá»›i Giáº£i phÃ¡p 1 vÃ  2.
-2. Táº­n dá»¥ng tá»‘i Ä‘a CSVC: ${userInfo.facilities}.
-3. Báº®T BUá»˜C TUÃ‚N THá»¦ FORMAT "YÃŠU Cáº¦U Äá»ŠNH Dáº NG OUTPUT":
-- Xuá»‘ng dÃ²ng sau má»—i cÃ¢u.
-                 - Xuá»‘ng 2 dÃ²ng sau má»—i Ä‘oáº¡n.
-                 - CÃ³ khung "Káº¾T THÃšC GIáº¢I PHÃP" á»Ÿ cuá»‘i.
-              4. Pháº£i cÃ³ VÃ Dá»¤ MINH Há»ŒA cá»¥ thá»ƒ theo SGK ${userInfo.textbook}.
+
+              Yêu cầu:
+
+1. Nội dung độc đáo, KHÔNG trùng lặp với Giải pháp 1 và 2.
+
+2. Tận dụng tối đa CSVC: ${userInfo.facilities}.
+
+3. BẮT BUỘC TUÂN THỦ FORMAT "YÊU CẦU ĐỊNH DẠNG OUTPUT":
+
+- Xuống dòng sau mỗi câu.
+
+                 - Xuống 2 dòng sau mỗi đoạn.
+
+                 - Có khung "KẾT THÚC GIẢI PHĐP" ở cuối.
+
+              4. Phải có VĐ DỤ MINH HỌA cụ thể theo SGK ${userInfo.textbook}.
+
               
-              ðŸ–¼ï¸ Gá»¢I Ã HÃŒNH áº¢NH MINH Há»ŒA(Báº®T BUá»˜C):
-              Trong GIáº¢I PHÃP 3, hÃ£y gá»£i Ã½ 1 - 2 vá»‹ trÃ­ nÃªn Ä‘áº·t hÃ¬nh áº£nh minh há»a.
+
+              🖼Đ GỢI Đ HÌNH ẢNH MINH HỌA(BẮT BUỘC):
+
+              Trong GIẢI PHĐP 3, hãy gợi ý 1 - 2 vị trí nên đặt hình ảnh minh hĐa.
+
+
 
   ${getPageLimitPrompt()}
-  ${getSectionPagePrompt('Giáº£i phÃ¡p 3', 'perSolution')} `,
+
+  ${getSectionPagePrompt('Giải pháp 3', 'perSolution')} `,
+
           nextStep: GenerationStep.PART_IV_SOL3
+
         },
-        // GP3 â†’ GP3 Review (KHÃ”NG viáº¿t GP4 hoáº·c Pháº§n V-VI á»Ÿ Ä‘Ã¢y)
+
+        // GP3 → GP3 Review (KHÔNG viết GP4 hoặc Phần V-VI ở đây)
+
         [GenerationStep.PART_IV_SOL3]: {
-          prompt: `âœ… HOÃ€N THÃ€NH GIáº¢I PHÃP 3. Vui lÃ²ng xem xÃ©t vÃ  duyá»‡t trÆ°á»›c khi tiáº¿p tá»¥c.`,
+
+          prompt: `✅ HOÀN THÀNH GIẢI PHĐP 3. Vui lòng xem xét và duyệt trước khi tiếp tục.`,
+
           nextStep: GenerationStep.PART_IV_SOL3_REVIEW,
-          skipAppend: true // KhÃ´ng append vÃ o fullDocument Ä‘á»ƒ trÃ¡nh láº·p ná»™i dung
+
+          skipAppend: true // Không append vào fullDocument để tránh lặp nội dung
+
         },
-        // GP3 Review â†’ GP4 hoáº·c PART_V_VI (Viáº¿t sau khi approve GP3)
+
+        // GP3 Review → GP4 hoặc PART_V_VI (Viết sau khi approve GP3)
+
         [GenerationStep.PART_IV_SOL3_REVIEW]: (userInfo.numSolutions || 3) > 3
+
           ? {
-            prompt: `
-                Báº®T Äáº¦U pháº£n há»“i báº±ng MENU NAVIGATION tráº¡ng thÃ¡i(Viáº¿t Giáº£i phÃ¡p 4 - Äang thá»±c hiá»‡n).
 
-                Tiáº¿p tá»¥c giá»¯ vá»¯ng vai trÃ² CHUYÃŠN GIA GIÃO Dá»¤C(ULTRA MODE).
+            prompt: `
+
+                BẮT ĐẦU phản hồi bằng MENU NAVIGATION trạng thái(Viết Giải pháp 4 - Đang thực hiện).
+
+
+
+                Tiếp tục giữ vững vai trò CHUYÊN GIA GIĐO DỤC(ULTRA MODE).
+
                 
-                Nhiá»‡m vá»¥: Viáº¿t chi tiáº¿t GIáº¢I PHÃP 4(Má»Ÿ rá»™ng / NÃ¢ng cao) cho Ä‘á» tÃ i: "${userInfo.topic}".
-                MÃ´n: ${userInfo.subject} - Lá»›p: ${userInfo.grade} - Cáº¥p: ${userInfo.level}
+
+                Nhiệm vụ: Viết chi tiết GIẢI PHĐP 4(Mở rộng / Nâng cao) cho đĐ tài: "${userInfo.topic}".
+
+                Môn: ${userInfo.subject} - Lớp: ${userInfo.grade} - Cấp: ${userInfo.level}
+
                 
-                âš ï¸ Báº®T BUá»˜C: TÃªn GIáº¢I PHÃP 4 PHáº¢I TRÃ™NG KHá»šP vá»›i dÃ n Ã½ Ä‘Ã£ duyá»‡t.
-                Ná»™i dung PHáº¢I xoay quanh Ä‘á» tÃ i "${userInfo.topic}", phÃ¹ há»£p mÃ´n ${userInfo.subject}.
+
+                ⚠Đ BẮT BUỘC: Tên GIẢI PHĐP 4 PHẢI TRÙNG KHỚP với dàn ý đã duyệt.
+
+                Nội dung PHẢI xoay quanh đĐ tài "${userInfo.topic}", phù hợp môn ${userInfo.subject}.
+
                 
-                âš ï¸ LÆ¯U Ã: ÄÃ¢y lÃ  giáº£i phÃ¡p Má»ž Rá»˜NG vÃ  NÃ‚NG CAO.
-                CÃ³ thá»ƒ lÃ : á»¨ng dá»¥ng cÃ´ng nghá»‡ / AI nÃ¢ng cao, phÃ¡t triá»ƒn má»Ÿ rá»™ng Ä‘á»‘i tÆ°á»£ng...
+
+                ⚠Đ LƯU Đ: Đây là giải pháp MỞ RỘNG và NÂNG CAO.
+
+                Có thể là: Ứng dụng công nghệ / AI nâng cao, phát triển mở rộng đối tượng...
+
                 
-                YÃªu cáº§u:
-1. Ná»™i dung Ä‘á»™c Ä‘Ã¡o, KHÃ”NG trÃ¹ng láº·p vá»›i Giáº£i phÃ¡p 1, 2, 3.
-2. Táº­n dá»¥ng tá»‘i Ä‘a CSVC: ${userInfo.facilities}.
-3. Báº®T BUá»˜C TUÃ‚N THá»¦ FORMAT.
-                4. Pháº£i cÃ³ VÃ Dá»¤ MINH Há»ŒA cá»¥ thá»ƒ.
+
+                Yêu cầu:
+
+1. Nội dung độc đáo, KHÔNG trùng lặp với Giải pháp 1, 2, 3.
+
+2. Tận dụng tối đa CSVC: ${userInfo.facilities}.
+
+3. BẮT BUỘC TUÂN THỦ FORMAT.
+
+                4. Phải có VĐ DỤ MINH HỌA cụ thể.
+
+
 
   ${getPageLimitPrompt()}
-  ${getSectionPagePrompt('Giáº£i phÃ¡p 4', 'perSolution')} `,
+
+  ${getSectionPagePrompt('Giải pháp 4', 'perSolution')} `,
+
             nextStep: GenerationStep.PART_IV_SOL4
+
           }
+
           : {
+
             prompt: `
-                Báº®T Äáº¦U pháº£n há»“i báº±ng MENU NAVIGATION tráº¡ng thÃ¡i(Káº¿t luáº­n & Khuyáº¿n nghá»‹ - Äang thá»±c hiá»‡n).
 
-                Tiáº¿p tá»¥c viáº¿t:
+                BẮT ĐẦU phản hồi bằng MENU NAVIGATION trạng thái(Kết luận & Khuyến nghị - Đang thực hiện).
 
-5. Káº¾T QUáº¢ Äáº T ÄÆ¯á»¢C(4 - 5 trang):
-- 5.1.Má»¥c Ä‘Ã­ch thá»±c nghiá»‡m
-  - 5.2.Ná»™i dung thá»±c nghiá»‡m
-    - 5.3.Tá»• chá»©c thá»±c nghiá»‡m(Báº£ng so sÃ¡nh TRÆ¯á»šC - SAU vá»›i sá»‘ liá»‡u láº»)
 
-6. ÄIá»€U KIá»†N Äá»‚ SÃNG KIáº¾N ÄÆ¯á»¢C NHÃ‚N Rá»˜NG(1 - 2 trang)
+
+                Tiếp tục viết:
+
+
+
+5. KẾT QUẢ ĐẠT ĐƯỢC(4 - 5 trang):
+
+- 5.1.Mục đích thực nghiệm
+
+  - 5.2.Nội dung thực nghiệm
+
+    - 5.3.Tổ chức thực nghiệm(Bảng so sánh TRƯỚC - SAU với số liệu lẻ)
+
+
+
+6. ĐIỀU KIỆN ĐỂ SĐNG KIẾN ĐƯỢC NHÂN RỘNG(1 - 2 trang)
+
                 
-                Káº¾T LUáº¬N VÃ€ KHUYáº¾N NGHá»Š(2 - 3 trang)
+
+                KẾT LUẬN VÀ KHUYẾN NGHỊ(2 - 3 trang)
+
                 
-                TÃ€I LIá»†U THAM KHáº¢O(8 - 12 tÃ i liá»‡u)
+
+                TÀI LIỆU THAM KHẢO(8 - 12 tài liệu)
+
                 
-                Äáº£m báº£o sá»‘ liá»‡u pháº§n Káº¿t quáº£ pháº£i LOGIC.Sá»­ dá»¥ng sá»‘ liá»‡u láº»(42.3 %, 67.8 %).
+
+                Đảm bảo số liệu phần Kết quả phải LOGIC.Sử dụng số liệu lẻ(42.3 %, 67.8 %).
+
                 
-                ðŸ–¼ï¸ Gá»¢I Ã HÃŒNH áº¢NH MINH Há»ŒA.
+
+                🖼Đ GỢI Đ HÌNH ẢNH MINH HỌA.
+
+
 
   ${getPageLimitPrompt()}
-  ${getSectionPagePrompt('Káº¿t quáº£ + Káº¿t luáº­n + Khuyáº¿n nghá»‹ + TÃ i liá»‡u tham kháº£o', 'partV_VI')} `,
+
+  ${getSectionPagePrompt('Kết quả + Kết luận + Khuyến nghị + Tài liệu tham khảo', 'partV_VI')} `,
+
             nextStep: GenerationStep.PART_V_VI
-          },
-        // GP4 â†’ GP4 Review (KHÃ”NG viáº¿t GP5 á»Ÿ Ä‘Ã¢y)
-        [GenerationStep.PART_IV_SOL4]: {
-          prompt: `âœ… HOÃ€N THÃ€NH GIáº¢I PHÃP 4. Vui lÃ²ng xem xÃ©t vÃ  duyá»‡t trÆ°á»›c khi tiáº¿p tá»¥c.`,
-          nextStep: GenerationStep.PART_IV_SOL4_REVIEW,
-          skipAppend: true // KhÃ´ng append vÃ o fullDocument Ä‘á»ƒ trÃ¡nh láº·p ná»™i dung
-        },
-        // GP4 Review â†’ GP5 (Viáº¿t GP5 sau khi approve GP4)
-        [GenerationStep.PART_IV_SOL4_REVIEW]: {
-          prompt: `
-              Báº®T Äáº¦U pháº£n há»“i báº±ng MENU NAVIGATION tráº¡ng thÃ¡i(Viáº¿t Giáº£i phÃ¡p 5 - Äang thá»±c hiá»‡n).
 
-              Tiáº¿p tá»¥c giá»¯ vá»¯ng vai trÃ² CHUYÃŠN GIA GIÃO Dá»¤C(ULTRA MODE).
+          },
+
+        // GP4 → GP4 Review (KHÔNG viết GP5 ở đây)
+
+        [GenerationStep.PART_IV_SOL4]: {
+
+          prompt: `✅ HOÀN THÀNH GIẢI PHĐP 4. Vui lòng xem xét và duyệt trước khi tiếp tục.`,
+
+          nextStep: GenerationStep.PART_IV_SOL4_REVIEW,
+
+          skipAppend: true // Không append vào fullDocument để tránh lặp nội dung
+
+        },
+
+        // GP4 Review → GP5 (Viết GP5 sau khi approve GP4)
+
+        [GenerationStep.PART_IV_SOL4_REVIEW]: {
+
+          prompt: `
+
+              BẮT ĐẦU phản hồi bằng MENU NAVIGATION trạng thái(Viết Giải pháp 5 - Đang thực hiện).
+
+
+
+              Tiếp tục giữ vững vai trò CHUYÊN GIA GIĐO DỤC(ULTRA MODE).
+
               
-              Nhiá»‡m vá»¥: Viáº¿t chi tiáº¿t GIáº¢I PHÃP 5(Má»Ÿ rá»™ng / NÃ¢ng cao cuá»‘i cÃ¹ng) cho Ä‘á» tÃ i: "${userInfo.topic}".
+
+              Nhiệm vụ: Viết chi tiết GIẢI PHĐP 5(Mở rộng / Nâng cao cuối cùng) cho đĐ tài: "${userInfo.topic}".
+
               
-              âš ï¸ LÆ¯U Ã: ÄÃ¢y lÃ  giáº£i phÃ¡p Má»ž Rá»˜NG cuá»‘i cÃ¹ng.
+
+              ⚠Đ LƯU Đ: Đây là giải pháp MỞ RỘNG cuối cùng.
+
               
-              YÃªu cáº§u:
-1. Ná»™i dung Ä‘á»™c Ä‘Ã¡o, KHÃ”NG trÃ¹ng láº·p vá»›i cÃ¡c giáº£i phÃ¡p trÆ°á»›c.
-              2. Káº¿t thÃºc báº±ng Má»I LIÃŠN Há»† GIá»®A Táº¤T Cáº¢ 5 GIáº¢I PHÃP(tÃ­nh há»‡ thá»‘ng, logic).
-              3. Báº®T BUá»˜C TUÃ‚N THá»¦ FORMAT.
+
+              Yêu cầu:
+
+1. Nội dung độc đáo, KHÔNG trùng lặp với các giải pháp trước.
+
+              2. Kết thúc bằng MĐI LIÊN HỆ GIỮA TẤT CẢ 5 GIẢI PHĐP(tính hệ thống, logic).
+
+              3. BẮT BUỘC TUÂN THỦ FORMAT.
+
+
 
   ${getPageLimitPrompt()}
-  ${getSectionPagePrompt('Giáº£i phÃ¡p 5', 'perSolution')} `,
+
+  ${getSectionPagePrompt('Giải pháp 5', 'perSolution')} `,
+
           nextStep: GenerationStep.PART_IV_SOL5
+
         },
-        // GP5 â†’ GP5 Review (KHÃ”NG viáº¿t Pháº§n V-VI á»Ÿ Ä‘Ã¢y)
+
+        // GP5 → GP5 Review (KHÔNG viết Phần V-VI ở đây)
+
         [GenerationStep.PART_IV_SOL5]: {
-          prompt: `âœ… HOÃ€N THÃ€NH GIáº¢I PHÃP 5. Vui lÃ²ng xem xÃ©t vÃ  duyá»‡t trÆ°á»›c khi tiáº¿p tá»¥c.`,
+
+          prompt: `✅ HOÀN THÀNH GIẢI PHĐP 5. Vui lòng xem xét và duyệt trước khi tiếp tục.`,
+
           nextStep: GenerationStep.PART_IV_SOL5_REVIEW,
-          skipAppend: true // KhÃ´ng append vÃ o fullDocument Ä‘á»ƒ trÃ¡nh láº·p ná»™i dung
+
+          skipAppend: true // Không append vào fullDocument để tránh lặp nội dung
+
         },
-        // GP5 Review â†’ PART_V_VI (Viáº¿t Pháº§n V-VI sau khi approve GP5)
+
+        // GP5 Review → PART_V_VI (Viết Phần V-VI sau khi approve GP5)
+
         [GenerationStep.PART_IV_SOL5_REVIEW]: {
+
           prompt: `
-              Báº®T Äáº¦U pháº£n há»“i báº±ng MENU NAVIGATION tráº¡ng thÃ¡i(Káº¿t luáº­n & Khuyáº¿n nghá»‹ - Äang thá»±c hiá»‡n).
+
+              BẮT ĐẦU phản hồi bằng MENU NAVIGATION trạng thái(Kết luận & Khuyến nghị - Đang thực hiện).
+
+
 
   ${RESULT_GUIDE}
 
+
+
 ${CONCLUSION_GUIDE}
 
-              Tiáº¿p tá»¥c viáº¿t:
 
-5. Káº¾T QUáº¢ Äáº T ÄÆ¯á»¢C(4 - 5 trang):
-- 5.1.Má»¥c Ä‘Ã­ch thá»±c nghiá»‡m
-  - 5.2.Ná»™i dung thá»±c nghiá»‡m
-    - 5.3.Tá»• chá»©c thá»±c nghiá»‡m(Báº£ng so sÃ¡nh TRÆ¯á»šC - SAU vá»›i sá»‘ liá»‡u láº»)
 
-6. ÄIá»€U KIá»†N Äá»‚ SÃNG KIáº¾N ÄÆ¯á»¢C NHÃ‚N Rá»˜NG(1 - 2 trang)
+              Tiếp tục viết:
+
+
+
+5. KẾT QUẢ ĐẠT ĐƯỢC(4 - 5 trang):
+
+- 5.1.Mục đích thực nghiệm
+
+  - 5.2.Nội dung thực nghiệm
+
+    - 5.3.Tổ chức thực nghiệm(Bảng so sánh TRƯỚC - SAU với số liệu lẻ)
+
+
+
+6. ĐIỀU KIỆN ĐỂ SĐNG KIẾN ĐƯỢC NHÂN RỘNG(1 - 2 trang)
+
               
-              Káº¾T LUáº¬N VÃ€ KHUYáº¾N NGHá»Š(2 - 3 trang)
+
+              KẾT LUẬN VÀ KHUYẾN NGHỊ(2 - 3 trang)
+
               
-              TÃ€I LIá»†U THAM KHáº¢O(8 - 12 tÃ i liá»‡u)
+
+              TÀI LIỆU THAM KHẢO(8 - 12 tài liệu)
+
               
-              Äáº£m báº£o sá»‘ liá»‡u pháº§n Káº¿t quáº£ pháº£i LOGIC.Sá»­ dá»¥ng sá»‘ liá»‡u láº».
+
+              Đảm bảo số liệu phần Kết quả phải LOGIC.Sử dụng số liệu lẻ.
+
               
-              ðŸ–¼ï¸ Gá»¢I Ã HÃŒNH áº¢NH MINH Há»ŒA.
+
+              🖼Đ GỢI Đ HÌNH ẢNH MINH HỌA.
+
+
 
   ${getPageLimitPrompt()}
-  ${getSectionPagePrompt('Káº¿t quáº£ + Káº¿t luáº­n + Khuyáº¿n nghá»‹ + TÃ i liá»‡u tham kháº£o', 'partV_VI')} `,
+
+  ${getSectionPagePrompt('Kết quả + Kết luận + Khuyến nghị + Tài liệu tham khảo', 'partV_VI')} `,
+
           nextStep: GenerationStep.PART_V_VI
+
         },
-        // PART_V_VI â†’ COMPLETED
+
+        // PART_V_VI → COMPLETED
+
         [GenerationStep.PART_V_VI]: {
+
           prompt: `
-              âœ… SKKN ÄÃƒ HOÃ€N THÃ€NH!
+
+              ✅ SKKN ĐÃ HOÀN THÀNH!
+
               
-              Báº¡n Ä‘Ã£ viáº¿t xong toÃ n bá»™ ná»™i dung chÃ­nh cá»§a SKKN.
-              Bao gá»“m: Äáº·t váº¥n Ä‘á», CÆ¡ sá»Ÿ lÃ½ luáº­n, Thá»±c tráº¡ng, Giáº£i phÃ¡p, Káº¿t quáº£ vÃ  Káº¿t luáº­n.
+
+              Bạn đã viết xong toàn bộ nội dung chính của SKKN.
+
+              Bao gồm: Đặt vấn đĐ, Cơ sở lý luận, Thực trạng, Giải pháp, Kết quả và Kết luận.
+
               
-              ðŸ“Œ BÃ‚Y GIá»œ Báº N CÃ“ THá»‚:
-1. Xuáº¥t file Word Ä‘á»ƒ chá»‰nh sá»­a chi tiáº¿t
-2. Táº¡o PHá»¤ Lá»¤C chi tiáº¿t báº±ng nÃºt "Táº O PHá»¤ Lá»¤C"
-3. Kiá»ƒm tra láº¡i ná»™i dung vÃ  Ä‘á»‹nh dáº¡ng
+
+              📌 BÂY GIỜ BẠN CÓ THỂ:
+
+1. Xuất file Word để chỉnh sửa chi tiết
+
+2. Tạo PHỤ LỤC chi tiết bằng nút "TẠO PHỤ LỤC"
+
+3. Kiểm tra lại nội dung và định dạng
+
               
-              ChÃºc má»«ng báº¡n Ä‘Ã£ hoÃ n thÃ nh báº£n tháº£o SKKN!`,
+
+              Chúc mừng bạn đã hoàn thành bản thảo SKKN!`,
+
           nextStep: GenerationStep.COMPLETED,
-          skipAppend: true // KhÃ´ng append thÃ´ng bÃ¡o hoÃ n thÃ nh vÃ o fullDocument
+
+          skipAppend: true // Không append thông báo hoàn thành vào fullDocument
+
         }
+
       };
+
       const stepConfig = nextStepMap[state.step];
+
       if (!stepConfig) return;
+
       currentStepPrompt = stepConfig.prompt;
+
       nextStepEnum = stepConfig.nextStep;
-      // CÃ¡c bÆ°á»›c chuyá»ƒn tiáº¿p (HOÃ€N THÃ€NH GP, COMPLETED) khÃ´ng append vÃ o fullDocument
+
+      // Các bước chuyển tiếp (HOÀN THÀNH GP, COMPLETED) không append vào fullDocument
+
       shouldAppend = !stepConfig.skipAppend;
+
     }
+
+
 
     if (!currentStepPrompt) return;
 
+
+
     setState(prev => ({ ...prev, isStreaming: true, error: null, step: nextStepEnum }));
 
+
+
     try {
+
       let sectionText = "\n\n---\n\n"; // Separator
+
       await sendMessageStream(currentStepPrompt, (chunk) => {
+
         sectionText += chunk;
+
         if (shouldAppend) {
+
           setState(prev => ({
+
             ...prev,
+
             fullDocument: prev.fullDocument + chunk
+
           }));
+
         }
+
       });
+
+
 
       // Just set streaming to false, step was already set
+
       setState(prev => ({ ...prev, isStreaming: false }));
 
+
+
     } catch (error: any) {
-      // Thá»­ xoay API key náº¿u lá»—i quota/rate limit
+
+      // Thử xoay API key nếu lỗi quota/rate limit
+
       const errorType = parseApiError(error);
+
       if (errorType === 'QUOTA_EXCEEDED' || errorType === 'RATE_LIMIT') {
+
         const rotation = apiKeyManager.markKeyError(apiKey, errorType);
+
         if (rotation.success && rotation.newKey) {
-          console.log(`ðŸ”„ Tá»± Ä‘á»™ng xoay key: ${rotation.message} `);
+
+          console.log(`🔄 Tự động xoay key: ${rotation.message} `);
+
           setApiKey(rotation.newKey);
+
           localStorage.setItem('gemini_api_key', rotation.newKey);
+
           initializeGeminiChat(rotation.newKey, selectedModel);
-          // Tá»± Ä‘á»™ng thá»­ láº¡i vá»›i key má»›i
+
+          // Tự động thử lại với key mới
+
           setState(prev => ({ ...prev, isStreaming: false, error: null }));
+
           setTimeout(() => generateNextSection(), 500);
+
           return;
+
         }
+
       }
+
       setState(prev => ({ ...prev, isStreaming: false, error: error.message }));
+
     }
+
   };
 
+
+
   // Export to Word
+
   const exportToWord = async () => {
+
     try {
+
       const { exportMarkdownToDocx } = await import('./services/docxExporter');
+
       const filename = `SKKN_${userInfo.topic.substring(0, 30).replace(/[^a-zA-Z0-9\u00C0-\u1EF9]/g, '_')}.docx`;
-      // Truyá»n headerFields Ä‘á»ƒ táº¡o pháº§n Ä‘áº§u SKKN trong Word
+
+      // TruyĐn headerFields để tạo phần đầu SKKN trong Word
+
       const templateHeaderFields = customTemplateData?.headerFields || {};
+
       await exportMarkdownToDocx(state.fullDocument, filename, templateHeaderFields, {
+
         topic: userInfo.topic,
+
         school: userInfo.school,
+
         location: userInfo.location,
+
         subject: userInfo.subject,
+
       });
+
     } catch (error: any) {
+
       console.error('Export error:', error);
-      alert('CÃ³ lá»—i khi xuáº¥t file. Vui lÃ²ng thá»­ láº¡i.');
+
+      alert('Có lỗi khi xuất file. Vui lòng thử lại.');
+
     }
+
   };
+
+
 
   // ====== REVIEW SOLUTION HANDLERS ======
 
-  // XÃ¡c Ä‘á»‹nh sá»‘ giáº£i phÃ¡p dá»±a trÃªn step hiá»‡n táº¡i
+
+
+  // Xác định số giải pháp dựa trên step hiện tại
+
   const getSolutionNumberFromStep = (step: GenerationStep): number => {
+
     const stepToSolution: Record<number, number> = {
+
       [GenerationStep.PART_IV_SOL1_REVIEW]: 1,
+
       [GenerationStep.PART_IV_SOL2_REVIEW]: 2,
+
       [GenerationStep.PART_IV_SOL3_REVIEW]: 3,
+
       [GenerationStep.PART_IV_SOL4_REVIEW]: 4,
+
       [GenerationStep.PART_IV_SOL5_REVIEW]: 5,
+
     };
+
     return stepToSolution[step] || 0;
+
   };
 
-  // Kiá»ƒm tra cÃ³ pháº£i step review khÃ´ng
+
+
+  // Kiểm tra có phải step review không
+
   const isReviewStep = (step: GenerationStep): boolean => {
+
     return [
+
       GenerationStep.PART_IV_SOL1_REVIEW,
+
       GenerationStep.PART_IV_SOL2_REVIEW,
+
       GenerationStep.PART_IV_SOL3_REVIEW,
+
       GenerationStep.PART_IV_SOL4_REVIEW,
+
       GenerationStep.PART_IV_SOL5_REVIEW,
+
     ].includes(step);
+
   };
 
-  // Duyá»‡t giáº£i phÃ¡p vÃ  tiáº¿p tá»¥c
+
+
+  // Duyệt giải pháp và tiếp tục
+
   const handleApproveSolution = () => {
+
     const solutionNum = getSolutionNumberFromStep(state.step);
 
-    // LÆ°u giáº£i phÃ¡p Ä‘Ã£ duyá»‡t
+
+
+    // Lưu giải pháp đã duyệt
+
     setSolutionsState(prev => ({
+
       ...prev,
+
       [`solution${solutionNum} `]: {
+
         content: currentSolutionContent,
+
         isApproved: true,
+
         revisionHistory: [],
+
       },
+
     }));
 
-    // ÄÃ³ng popup
+
+
+    // Đóng popup
+
     setShowSolutionReview(false);
+
     setCurrentSolutionContent('');
 
-    // Chuyá»ƒn sang bÆ°á»›c tiáº¿p theo - tiáº¿p tá»¥c viáº¿t giáº£i phÃ¡p tiáº¿p hoáº·c Pháº§n V-VI
+
+
+    // Chuyển sang bước tiếp theo - tiếp tục viết giải pháp tiếp hoặc Phần V-VI
+
     generateNextSection();
+
   };
 
-  // YÃªu cáº§u viáº¿t láº¡i giáº£i phÃ¡p
+
+
+  // Yêu cầu viết lại giải pháp
+
   const handleReviseSolution = async (feedback: string, referenceDoc?: string) => {
+
     if (!apiKey) {
+
       setShowApiModal(true);
+
       return;
+
     }
+
+
 
     setIsRevisingSolution(true);
+
     const solutionNum = getSolutionNumberFromStep(state.step);
 
+
+
     try {
+
       const revisionPrompt = `
-        NHIá»†M Vá»¤: VIáº¾T Láº I GIáº¢I PHÃP ${solutionNum} theo yÃªu cáº§u má»›i.
+
+        NHIỆM VỤ: VIẾT LẠI GIẢI PHĐP ${solutionNum} theo yêu cầu mới.
+
         
-        âš ï¸ YÃŠU Cáº¦U Sá»¬A Tá»ª NGÆ¯á»œI DÃ™NG:
+
+        ⚠Đ YÊU CẦU SỬA TỪ NGƯỜI DÙNG:
+
         ${feedback}
+
         
+
         ${referenceDoc ? `
-        ðŸ“„ TÃ€I LIá»†U THAM KHáº¢O Má»šI:
-        Dá»±a vÃ o ná»™i dung tÃ i liá»‡u sau Ä‘á»ƒ viáº¿t láº¡i giáº£i phÃ¡p:
+
+        📄 TÀI LIỆU THAM KHẢO MỚI:
+
+        Dựa vào nội dung tài liệu sau để viết lại giải pháp:
+
         ---
+
         ${referenceDoc.substring(0, 5000)}
+
         ---
+
         ` : ''
+
         }
+
         
-        âš ï¸ Ná»˜I DUNG CÅ¨(Äá»‚ THAM KHáº¢O):
+
+        ⚠Đ NỘI DUNG CŨ(ĐỂ THAM KHẢO):
+
         ${currentSolutionContent.substring(0, 3000)}
+
         
-        HÃ£y viáº¿t láº¡i GIáº¢I PHÃP ${solutionNum} hoÃ n toÃ n má»›i, Ä‘áº£m báº£o:
-1. TuÃ¢n thá»§ YÃŠU Cáº¦U Sá»¬A tá»« ngÆ°á»i dÃ¹ng
-2. Tham kháº£o tÃ i liá»‡u má»›i náº¿u cÃ³
-3. Giá»¯ nguyÃªn cáº¥u trÃºc: Má»¥c tiÃªu - CÆ¡ sá»Ÿ - Quy trÃ¬nh - VÃ­ dá»¥ - CÃ´ng cá»¥ - LÆ°u Ã½
-4. Format chuáº©n SKKN
+
+        Hãy viết lại GIẢI PHĐP ${solutionNum} hoàn toàn mới, đảm bảo:
+
+1. Tuân thủ YÊU CẦU SỬA từ ngưĐi dùng
+
+2. Tham khảo tài liệu mới nếu có
+
+3. Giữ nguyên cấu trúc: Mục tiêu - Cơ sở - Quy trình - Ví dụ - Công cụ - Lưu ý
+
+4. Format chuẩn SKKN
+
         
+
         ${getPageLimitPrompt()}
+
 `;
 
+
+
       let revisedContent = "";
+
       await sendMessageStream(revisionPrompt, (chunk) => {
+
         revisedContent += chunk;
+
         setCurrentSolutionContent(revisedContent);
+
       });
 
+
+
       setIsRevisingSolution(false);
+
     } catch (error: any) {
+
       console.error('Revision error:', error);
+
       setIsRevisingSolution(false);
-      alert('CÃ³ lá»—i khi viáº¿t láº¡i. Vui lÃ²ng thá»­ láº¡i.');
+
+      alert('Có lỗi khi viết lại. Vui lòng thử lại.');
+
     }
+
   };
 
-  // Xuáº¥t Word riÃªng cho 1 giáº£i phÃ¡p
+
+
+  // Xuất Word riêng cho 1 giải pháp
+
   const exportSolutionToWord = async () => {
+
     try {
+
       const { exportMarkdownToDocx } = await import('./services/docxExporter');
+
       const solutionNum = getSolutionNumberFromStep(state.step);
+
       const filename = `Giai_phap_${solutionNum}_${userInfo.topic.substring(0, 20).replace(/[^a-zA-Z0-9\u00C0-\u1EF9]/g, '_')}.docx`;
+
       await exportMarkdownToDocx(currentSolutionContent, filename);
+
     } catch (error: any) {
+
       console.error('Export solution error:', error);
-      alert('CÃ³ lá»—i khi xuáº¥t file. Vui lÃ²ng thá»­ láº¡i.');
+
+      alert('Có lỗi khi xuất file. Vui lòng thử lại.');
+
     }
+
   };
 
-  // Effect Ä‘á»ƒ hiá»‡n popup review khi Ä‘áº¿n step review
+
+
+  // Effect để hiện popup review khi đến step review
+
   useEffect(() => {
+
     if (isReviewStep(state.step) && !state.isStreaming) {
-      // Láº¥y ná»™i dung giáº£i phÃ¡p vá»«a viáº¿t tá»« fullDocument
+
+      // Lấy nội dung giải pháp vừa viết từ fullDocument
+
       const solutionNum = getSolutionNumberFromStep(state.step);
 
-      // TÃ¬m ná»™i dung giáº£i phÃ¡p trong document - cáº£i thiá»‡n logic tÃ¬m kiáº¿m
+
+
+      // Tìm nội dung giải pháp trong document - cải thiện logic tìm kiếm
+
       const docContent = state.fullDocument;
+
+
 
       let solutionContent = '';
 
-      // QUAN TRá»ŒNG: Ná»™i dung giáº£i phÃ¡p chi tiáº¿t náº±m trong pháº§n:
-      // "ðŸ“‹ MÃ” Táº¢ SÃNG KIáº¾N" -> "4. CÃC GIáº¢I PHÃP, BIá»†N PHÃP THá»°C HIá»†N"
-      // KHÃ”NG pháº£i trong pháº§n DÃ n Ã½ (ngáº¯n, chá»‰ chá»©a tiÃªu Ä‘á»)
 
-      // BÆ°á»›c 1: TÃ¬m vá»‹ trÃ­ báº¯t Ä‘áº§u cá»§a pháº§n "4. CÃC GIáº¢I PHÃP" sau "ðŸ“‹ MÃ” Táº¢ SÃNG KIáº¾N"
+
+      // QUAN TRỌNG: Nội dung giải pháp chi tiết nằm trong phần:
+
+      // "📋 MÔ TẢ SĐNG KIẾN" -> "4. CĐC GIẢI PHĐP, BIỆN PHĐP THỰC HIỆN"
+
+      // KHÔNG phải trong phần Dàn ý (ngắn, chỉ chứa tiêu đĐ)
+
+
+
+      // Bước 1: Tìm vị trí bắt đầu của phần "4. CĐC GIẢI PHĐP" sau "📋 MÔ TẢ SĐNG KIẾN"
+
       let sectionStartIdx = -1;
 
-      // TÃ¬m vá»‹ trÃ­ "ðŸ“‹ MÃ” Táº¢ SÃNG KIáº¾N" (Ä‘Ã¢y lÃ  tiÃªu Ä‘á» cá»§a pháº§n ná»™i dung chÃ­nh)
-      const moTaSangKienIdx = docContent.indexOf('ðŸ“‹ MÃ” Táº¢ SÃNG KIáº¾N');
 
-      // TÃ¬m vá»‹ trÃ­ "4. CÃC GIáº¢I PHÃP" hoáº·c cÃ¡c biáº¿n thá»ƒ
+
+      // Tìm vị trí "📋 MÔ TẢ SĐNG KIẾN" (đây là tiêu đĐ của phần nội dung chính)
+
+      const moTaSangKienIdx = docContent.indexOf('📋 MÔ TẢ SĐNG KIẾN');
+
+
+
+      // Tìm vị trí "4. CĐC GIẢI PHĐP" hoặc các biến thể
+
       const giaiphapSectionPatterns = [
-        /4\.\s*CÃC GIáº¢I PHÃP/i,
-        /PHáº¦N\s*(IV|4)[:\s]*.*GIáº¢I PHÃP/i,
-        /IV\.\s*CÃC GIáº¢I PHÃP/i,
-        /4\.\s*GIáº¢I PHÃP/i,
+
+        /4\.\s*CĐC GIẢI PHĐP/i,
+
+        /PHẦN\s*(IV|4)[:\s]*.*GIẢI PHĐP/i,
+
+        /IV\.\s*CĐC GIẢI PHĐP/i,
+
+        /4\.\s*GIẢI PHĐP/i,
+
       ];
 
+
+
       for (const pattern of giaiphapSectionPatterns) {
+
         const match = pattern.exec(docContent);
+
         if (match && match.index !== undefined) {
-          // Náº¿u cÃ³ "ðŸ“‹ MÃ” Táº¢ SÃNG KIáº¾N", chá»‰ láº¥y pháº§n sau nÃ³
+
+          // Nếu có "📋 MÔ TẢ SĐNG KIẾN", chỉ lấy phần sau nó
+
           if (moTaSangKienIdx !== -1 && match.index > moTaSangKienIdx) {
+
             sectionStartIdx = match.index;
+
             break;
+
           } else if (moTaSangKienIdx === -1) {
-            // KhÃ´ng cÃ³ "ðŸ“‹ MÃ” Táº¢ SÃNG KIáº¾N", láº¥y vá»‹ trÃ­ Ä‘áº§u tiÃªn tÃ¬m Ä‘Æ°á»£c
+
+            // Không có "📋 MÔ TẢ SĐNG KIẾN", lấy vị trí đầu tiên tìm được
+
             sectionStartIdx = match.index;
+
             break;
+
           }
+
         }
+
       }
+
+
 
       let startIdx = -1;
 
-      // BÆ°á»›c 2: TÃ¬m GIáº¢I PHÃP X trong pháº¡m vi pháº§n "4. CÃC GIáº¢I PHÃP"
-      // Æ¯u tiÃªn tÃ¬m tá»« vá»‹ trÃ­ sectionStartIdx náº¿u cÃ³
+
+
+      // Bước 2: Tìm GIẢI PHĐP X trong phạm vi phần "4. CĐC GIẢI PHĐP"
+
+      // Ưu tiên tìm từ vị trí sectionStartIdx nếu có
+
       const searchFromIdx = sectionStartIdx !== -1 ? sectionStartIdx : 0;
+
       const searchContent = docContent.substring(searchFromIdx);
 
-      // Pattern tÃ¬m GIáº¢I PHÃP cÃ³ ná»™i dung chi tiáº¿t (separator + tiÃªu Ä‘á»)
+
+
+      // Pattern tìm GIẢI PHĐP có nội dung chi tiết (separator + tiêu đĐ)
+
       const detailPatterns = [
-        // Pattern cho format chuáº©n SKKN (cÃ³ separator vÃ  icon)
-        new RegExp(`â”+\\s *\\n ?\\s *ðŸ“‹\\s * GIáº¢I PHÃP\\s * ${solutionNum} \\s * [-â€“: ]`, 'i'),
-        new RegExp(`â”+\\s *\\n ?\\s * GIáº¢I PHÃP\\s *\\[?${solutionNum}\\] ?\\s * [-â€“: ]`, 'i'),
-        // Pattern vá»›i sá»‘ má»¥c 4.1, 4.2 (trong pháº§n IV)
-        new RegExp(`4\\.${solutionNum} [.: \\s] + GIáº¢I PHÃP\\s * ${solutionNum} `, 'i'),
-        // Pattern GIáº¢I PHÃP vá»›i tÃªn tiÃªu Ä‘á» (cÃ³ dáº¥u : hoáº·c -)
-        new RegExp(`GIáº¢I PHÃP\\s * ${solutionNum} \\s * [:â€“-]\\s * [^\\n]{ 10,} `, 'i'),
+
+        // Pattern cho format chuẩn SKKN (có separator và icon)
+
+        new RegExp(`Đ+\\s *\\n ?\\s *📋\\s * GIẢI PHĐP\\s * ${solutionNum} \\s * [-–: ]`, 'i'),
+
+        new RegExp(`Đ+\\s *\\n ?\\s * GIẢI PHĐP\\s *\\[?${solutionNum}\\] ?\\s * [-–: ]`, 'i'),
+
+        // Pattern với số mục 4.1, 4.2 (trong phần IV)
+
+        new RegExp(`4\\.${solutionNum} [.: \\s] + GIẢI PHĐP\\s * ${solutionNum} `, 'i'),
+
+        // Pattern GIẢI PHĐP với tên tiêu đĐ (có dấu : hoặc -)
+
+        new RegExp(`GIẢI PHĐP\\s * ${solutionNum} \\s * [:–-]\\s * [^\\n]{ 10,} `, 'i'),
+
       ];
 
-      // Thá»­ tá»«ng pattern chi tiáº¿t trÆ°á»›c
+
+
+      // Thử từng pattern chi tiết trước
+
       for (const pattern of detailPatterns) {
+
         const match = pattern.exec(searchContent);
+
         if (match && match.index !== undefined) {
+
           startIdx = searchFromIdx + match.index;
+
           break;
+
         }
+
       }
 
-      // Fallback: TÃ¬m GIáº¢I PHÃP X vá»›i ná»™i dung chi tiáº¿t (cÃ³ Ã­t nháº¥t 1 má»¥c con)
+
+
+      // Fallback: Tìm GIẢI PHĐP X với nội dung chi tiết (có ít nhất 1 mục con)
+
       if (startIdx === -1) {
-        const solutionMarker = `GIáº¢I PHÃP ${solutionNum} `;
+
+        const solutionMarker = `GIẢI PHĐP ${solutionNum} `;
+
         let searchStart = searchFromIdx;
 
+
+
         while (true) {
+
           const idx = docContent.indexOf(solutionMarker, searchStart);
+
           if (idx === -1) break;
 
-          // Kiá»ƒm tra 1500 kÃ½ tá»± tiáº¿p theo xem cÃ³ pháº£i ná»™i dung chi tiáº¿t khÃ´ng
+
+
+          // Kiểm tra 1500 ký tự tiếp theo xem có phải nội dung chi tiết không
+
           const nextChars = docContent.substring(idx, idx + 1500);
 
-          // Ná»™i dung chi tiáº¿t cÃ³ cÃ¡c pattern nÃ y:
-          // - "1. Má»¤C TIÃŠU" hoáº·c "1.1." hoáº·c "**1."
-          // - "CÆ  Sá»ž KHOA Há»ŒC" hoáº·c "Ná»˜I DUNG"
-          // - "QUY TRÃŒNH THá»°C HIá»†N" hoáº·c "BÆ°á»›c 1:"
-          // - "VÃ Dá»¤ MINH Há»ŒA" hoáº·c "ÄIá»€U KIá»†N"
-          const hasDetailContent = nextChars.match(/(?:1\.\s*Má»¤C TIÃŠU|\*\*1\.|1\.1\.|CÆ  Sá»ž KHOA Há»ŒC|Ná»˜I DUNG VÃ€|QUY TRÃŒNH|BÆ°á»›c\s*1|VÃ Dá»¤ MINH Há»ŒA|ÄIá»€U KIá»†N THá»°C HIá»†N)/i);
 
-          // Äáº£m báº£o khÃ´ng pháº£i trong dÃ n Ã½ (dÃ n Ã½ thÆ°á»ng ngáº¯n)
-          // Ná»™i dung chi tiáº¿t pháº£i cÃ³ >500 kÃ½ tá»± vÃ  cÃ³ cÃ¡c má»¥c con
+
+          // Nội dung chi tiết có các pattern này:
+
+          // - "1. MỤC TIÊU" hoặc "1.1." hoặc "**1."
+
+          // - "CƠ SỞ KHOA HỌC" hoặc "NỘI DUNG"
+
+          // - "QUY TRÌNH THỰC HIỆN" hoặc "Bước 1:"
+
+          // - "VĐ DỤ MINH HỌA" hoặc "ĐIỀU KIỆN"
+
+          const hasDetailContent = nextChars.match(/(?:1\.\s*MỤC TIÊU|\*\*1\.|1\.1\.|CƠ SỞ KHOA HỌC|NỘI DUNG VÀ|QUY TRÌNH|Bước\s*1|VĐ DỤ MINH HỌA|ĐIỀU KIỆN THỰC HIỆN)/i);
+
+
+
+          // Đảm bảo không phải trong dàn ý (dàn ý thưĐng ngắn)
+
+          // Nội dung chi tiết phải có >500 ký tự và có các mục con
+
           const isNotOutline = hasDetailContent && nextChars.length > 500;
 
+
+
           if (isNotOutline) {
+
             startIdx = idx;
+
             break;
+
           }
+
           searchStart = idx + 1;
+
         }
+
       }
+
+
 
       if (startIdx !== -1) {
-        // TÃ¬m Ä‘iá»ƒm káº¿t thÃºc
-        // Æ¯u tiÃªn tÃ¬m "Káº¾T THÃšC GIáº¢I PHÃP"
-        const endMarker = `Káº¾T THÃšC GIáº¢I PHÃP`;
+
+        // Tìm điểm kết thúc
+
+        // Ưu tiên tìm "KẾT THÚC GIẢI PHĐP"
+
+        const endMarker = `KẾT THÚC GIẢI PHĐP`;
+
         let endIdx = docContent.indexOf(endMarker, startIdx);
 
-        if (endIdx !== -1) {
-          // Láº¥y háº¿t dÃ²ng chá»©a "Káº¾T THÃšC GIáº¢I PHÃP" vÃ  pháº§n hÆ°á»›ng dáº«n copy
-          const endBlock = docContent.indexOf('â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”', endIdx + 20);
-          if (endBlock !== -1 && endBlock - endIdx < 500) {
-            endIdx = endBlock;
-          } else {
-            const endOfLine = docContent.indexOf('\n\n', endIdx);
-            endIdx = endOfLine !== -1 ? endOfLine + 1 : docContent.length;
-          }
-        } else {
-          // KhÃ´ng tÃ¬m tháº¥y end marker - tÃ¬m GIáº¢I PHÃP tiáº¿p theo hoáº·c "5. Káº¾T QUáº¢" hoáº·c separator
-          const nextSolutionIdx = docContent.indexOf(`GIáº¢I PHÃP ${solutionNum + 1} `, startIdx + 100);
-          const nextPartIdx = docContent.search(/(?:5\.\s*Káº¾T QUáº¢|Pháº§n\s*V|PHáº¦N\s*V)/i);
-          const nextSeparator = docContent.indexOf('â”â”â”â”â”â”â”â”â”â”â”', startIdx + 500);
 
-          // Láº¥y vá»‹ trÃ­ gáº§n nháº¥t
+
+        if (endIdx !== -1) {
+
+          // Lấy hết dòng chứa "KẾT THÚC GIẢI PHĐP" và phần hướng dẫn copy
+
+          const endBlock = docContent.indexOf('ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ', endIdx + 20);
+
+          if (endBlock !== -1 && endBlock - endIdx < 500) {
+
+            endIdx = endBlock;
+
+          } else {
+
+            const endOfLine = docContent.indexOf('\n\n', endIdx);
+
+            endIdx = endOfLine !== -1 ? endOfLine + 1 : docContent.length;
+
+          }
+
+        } else {
+
+          // Không tìm thấy end marker - tìm GIẢI PHĐP tiếp theo hoặc "5. KẾT QUẢ" hoặc separator
+
+          const nextSolutionIdx = docContent.indexOf(`GIẢI PHĐP ${solutionNum + 1} `, startIdx + 100);
+
+          const nextPartIdx = docContent.search(/(?:5\.\s*KẾT QUẢ|Phần\s*V|PHẦN\s*V)/i);
+
+          const nextSeparator = docContent.indexOf('ĐĐĐĐĐĐĐĐĐĐĐ', startIdx + 500);
+
+
+
+          // Lấy vị trí gần nhất
+
           const possibleEnds = [nextSolutionIdx, nextPartIdx, nextSeparator, docContent.length]
+
             .filter(idx => idx > startIdx + 500);
+
           endIdx = Math.min(...possibleEnds);
+
         }
+
+
 
         solutionContent = docContent.substring(startIdx, endIdx).trim();
+
       }
 
-      // Náº¿u váº«n khÃ´ng tÃ¬m Ä‘Æ°á»£c hoáº·c ná»™i dung quÃ¡ ngáº¯n (cÃ³ thá»ƒ lÃ  dÃ n Ã½)
-      // KhÃ´ng sá»­ dá»¥ng fallback láº¥y pháº§n cuá»‘i vÃ¬ sáº½ láº¥y nháº§m dÃ n Ã½
+
+
+      // Nếu vẫn không tìm được hoặc nội dung quá ngắn (có thể là dàn ý)
+
+      // Không sử dụng fallback lấy phần cuối vì sẽ lấy nhầm dàn ý
+
       if (!solutionContent || solutionContent.length < 500) {
-        // Thá»­ tÃ¬m tá»« cuá»‘i document ngÆ°á»£c lÃªn, bá» qua pháº§n dÃ n Ã½
-        const parts = docContent.split(/(?:â”{10,}|---{3,})/);
+
+        // Thử tìm từ cuối document ngược lên, bĐ qua phần dàn ý
+
+        const parts = docContent.split(/(?:Đ{10,}|---{3,})/);
+
         for (let i = parts.length - 1; i >= 0; i--) {
+
           const part = parts[i].trim();
-          // Kiá»ƒm tra pháº§n nÃ y cÃ³ pháº£i ná»™i dung giáº£i phÃ¡p chi tiáº¿t khÃ´ng
-          if (part.includes(`GIáº¢I PHÃP ${solutionNum} `) &&
+
+          // Kiểm tra phần này có phải nội dung giải pháp chi tiết không
+
+          if (part.includes(`GIẢI PHĐP ${solutionNum} `) &&
+
             part.length > 500 &&
-            (part.includes('Má»¤C TIÃŠU') || part.includes('QUY TRÃŒNH') || part.includes('BÆ°á»›c 1'))) {
+
+            (part.includes('MỤC TIÊU') || part.includes('QUY TRÌNH') || part.includes('Bước 1'))) {
+
             solutionContent = part;
+
             break;
+
           }
+
         }
+
       }
 
-      // Cuá»‘i cÃ¹ng: náº¿u váº«n khÃ´ng cÃ³, hiá»ƒn thá»‹ thÃ´ng bÃ¡o
+
+
+      // Cuối cùng: nếu vẫn không có, hiển thị thông báo
+
       if (!solutionContent || solutionContent.length < 100) {
-        solutionContent = `âš ï¸ KhÃ´ng tÃ¬m tháº¥y ná»™i dung chi tiáº¿t cá»§a GIáº¢I PHÃP ${solutionNum}.\n\nVui lÃ²ng kiá»ƒm tra láº¡i hoáº·c yÃªu cáº§u AI viáº¿t láº¡i giáº£i phÃ¡p nÃ y.`;
+
+        solutionContent = `⚠Đ Không tìm thấy nội dung chi tiết của GIẢI PHĐP ${solutionNum}.\n\nVui lòng kiểm tra lại hoặc yêu cầu AI viết lại giải pháp này.`;
+
       }
 
-      // KhÃ³a Modal Xem vÃ  Sá»­a giáº£i phÃ¡p - Tá»± Ä‘á»™ng duyá»‡t vÃ  chuyá»ƒn tiáº¿p
+
+
+      // Khóa Modal Xem và Sửa giải pháp - Tự động duyệt và chuyển tiếp
+
       setSolutionsState(prev => ({
+
         ...prev,
+
         [`solution${solutionNum}`]: {
+
           content: solutionContent,
+
           isApproved: true,
+
           revisionHistory: [],
+
         },
+
       }));
 
-      // Chuyá»ƒn sang bÆ°á»›c tiáº¿p theo
+
+
+      // Chuyển sang bước tiếp theo
+
       setTimeout(() => {
+
         generateNextSection();
+
       }, 100);
+
     }
+
   }, [state.step, state.isStreaming, state.fullDocument]);
 
-  // Generate Appendix - Function riÃªng Ä‘á»ƒ táº¡o phá»¥ lá»¥c
+
+
+  // Generate Appendix - Function riêng để tạo phụ lục
+
   const generateAppendix = async () => {
+
     if (!apiKey) {
+
       setShowApiModal(true);
+
       return;
+
     }
+
+
 
     setIsAppendixLoading(true);
 
-    // Khá»Ÿi táº¡o láº¡i chat session vá»›i API key hiá»‡n táº¡i (quan trá»ng khi user thay Ä‘á»•i API key)
+
+
+    // Khởi tạo lại chat session với API key hiện tại (quan trĐng khi user thay đổi API key)
+
     initializeGeminiChat(apiKey, selectedModel);
 
-    try {
-      const appendixPrompt = `
-        Báº®T Äáº¦U pháº£n há»“i báº±ng MENU NAVIGATION tráº¡ng thÃ¡i BÆ°á»›c 8(Táº¡o Phá»¥ lá»¥c chi tiáº¿t - Äang thá»±c hiá»‡n).
 
-        â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-        ðŸ“Ž NHIá»†M Vá»¤: Táº O Äáº¦Y Äá»¦ CÃC TÃ€I LIá»†U PHá»¤ Lá»¤C
-        â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+
+    try {
+
+      const appendixPrompt = `
+
+        BẮT ĐẦU phản hồi bằng MENU NAVIGATION trạng thái Bước 8(Tạo Phụ lục chi tiết - Đang thực hiện).
+
+
+
+        ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
+        📎 NHIỆM VỤ: TẠO ĐẦY ĐỦ CĐC TÀI LIỆU PHỤ LỤC
+
+        ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
         
-        âš ï¸ QUAN TRá»ŒNG: Báº¡n PHáº¢I dá»±a vÃ o Ná»˜I DUNG SKKN ÄÃƒ VIáº¾T bÃªn dÆ°á»›i Ä‘á»ƒ táº¡o phá»¥ lá»¥c.
-        CÃ¡c phá»¥ lá»¥c pháº£i KHá»šP vá»›i ná»™i dung, sá»‘ liá»‡u, giáº£i phÃ¡p Ä‘Ã£ Ä‘á» cáº­p trong SKKN.
-        KHÃ”NG táº¡o phá»¥ lá»¥c liÃªn quan Ä‘áº¿n hÃ¬nh áº£nh, video(vÃ¬ khÃ´ng thá»ƒ hiá»ƒn thá»‹).
+
+        ⚠Đ QUAN TRỌNG: Bạn PHẢI dựa vào NỘI DUNG SKKN ĐÃ VIẾT bên dưới để tạo phụ lục.
+
+        Các phụ lục phải KHỚP với nội dung, số liệu, giải pháp đã đĐ cập trong SKKN.
+
+        KHÔNG tạo phụ lục liên quan đến hình ảnh, video(vì không thể hiển thị).
+
         
-        â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-        ðŸ“„ Ná»˜I DUNG SKKN ÄÃƒ VIáº¾T(Äá»ŒC Ká»¸ Äá»‚ Táº O PHá»¤ Lá»¤C PHÃ™ Há»¢P):
-        â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+
+        ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
+        📄 NỘI DUNG SKKN ĐÃ VIẾT(ĐỌC KỸ ĐỂ TẠO PHỤ LỤC PHÙ HỢP):
+
+        ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
         
+
         ${state.fullDocument}
+
         
-        â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-        ðŸ“‹ THÃ”NG TIN Äá»€ TÃ€I:
-        â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-- TÃªn Ä‘á» tÃ i: ${userInfo.topic}
-- MÃ´n há»c: ${userInfo.subject}
-- Cáº¥p há»c: ${userInfo.level}
-- Khá»‘i lá»›p: ${userInfo.grade}
-- TrÆ°á»ng: ${userInfo.school}
-- Äá»‹a Ä‘iá»ƒm: ${userInfo.location}
+
+        ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
+        📋 THÔNG TIN ĐỀ TÀI:
+
+        ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
+- Tên đĐ tài: ${userInfo.topic}
+
+- Môn hĐc: ${userInfo.subject}
+
+- Cấp hĐc: ${userInfo.level}
+
+- Khối lớp: ${userInfo.grade}
+
+- TrưĐng: ${userInfo.school}
+
+- Địa điểm: ${userInfo.location}
+
 - CSVC: ${userInfo.facilities}
-- SGK: ${userInfo.textbook || "Hiá»‡n hÃ nh"}
+
+- SGK: ${userInfo.textbook || "Hiện hành"}
+
         
-        â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-        ðŸ“Ž YÃŠU Cáº¦U Táº O PHá»¤ Lá»¤C:
-        â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+
+        ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
+        📎 YÊU CẦU TẠO PHỤ LỤC:
+
+        ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
+
 
 ${APPENDIX_GUIDE}
-        
-        Dá»±a trÃªn Ná»˜I DUNG SKKN ÄÃƒ VIáº¾T á»Ÿ trÃªn, hÃ£y táº¡o Äáº¦Y Äá»¦, CHI TIáº¾T tá»«ng tÃ i liá»‡u phá»¥ lá»¥c sau:
 
-        â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-        ðŸ“‹ PHá»¤ Lá»¤C 1: PHIáº¾U KHáº¢O SÃT ÄÃNH GIÃ Má»¨C Äá»˜ Há»¨NG THÃš VÃ€ HIá»†U QUáº¢ Há»ŒC Táº¬P Cá»¦A Há»ŒC SINH
-        â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
         
-        ** PHáº¦N A: PHIáº¾U KHáº¢O SÃT TRÆ¯á»šC KHI ÃP Dá»¤NG SÃNG KIáº¾N **
 
-  Táº¡o báº£ng kháº£o sÃ¡t vá»›i format:
-        | STT | Ná»™i dung kháº£o sÃ¡t | 1 | 2 | 3 | 4 | 5 |
+        Dựa trên NỘI DUNG SKKN ĐÃ VIẾT ở trên, hãy tạo ĐẦY ĐỦ, CHI TIẾT từng tài liệu phụ lục sau:
+
+
+
+        ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
+        📋 PHỤ LỤC 1: PHIẾU KHẢO SĐT ĐĐNH GIĐ MỨC ĐỘ HỨNG THÚ VÀ HIỆU QUẢ HỌC TẬP CỦA HỌC SINH
+
+        ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
+        
+
+        ** PHẦN A: PHIẾU KHẢO SĐT TRƯỚC KHI ĐP DỤNG SĐNG KIẾN **
+
+
+
+  Tạo bảng khảo sát với format:
+
+        | STT | Nội dung khảo sát | 1 | 2 | 3 | 4 | 5 |
+
         | -----| -------------------| ---| ---| ---| ---| ---|
-        | 1 | [Ná»™i dung cÃ¢u há»i vá» má»©c Ä‘á»™ há»©ng thÃº vá»›i mÃ´n ${userInfo.subject}] | | | | | |
-        | 2 | [Ná»™i dung cÃ¢u há»i vá» khÃ³ khÄƒn khi há»c] | | | | | |
+
+        | 1 | [Nội dung câu hĐi vĐ mức độ hứng thú với môn ${userInfo.subject}] | | | | | |
+
+        | 2 | [Nội dung câu hĐi vĐ khó khăn khi hĐc] | | | | | |
+
         ...
+
         
-        Ghi chÃº: 1 = Ráº¥t khÃ´ng Ä‘á»“ng Ã½, 2 = KhÃ´ng Ä‘á»“ng Ã½, 3 = BÃ¬nh thÆ°á»ng, 4 = Äá»“ng Ã½, 5 = Ráº¥t Ä‘á»“ng Ã½
+
+        Ghi chú: 1 = Rất không đồng ý, 2 = Không đồng ý, 3 = Bình thưĐng, 4 = Đồng ý, 5 = Rất đồng ý
+
         
-        Ná»™i dung cÃ¢u há»i(10 - 12 cÃ¢u):
-- Má»©c Ä‘á»™ há»©ng thÃº vá»›i mÃ´n há»c
-  - Cáº£m nháº­n vá» phÆ°Æ¡ng phÃ¡p dáº¡y há»c hiá»‡n táº¡i
-    - Má»©c Ä‘á»™ tham gia hoáº¡t Ä‘á»™ng há»c táº­p
-      - Kháº£ nÄƒng tá»± há»c, tá»± nghiÃªn cá»©u
-        - Má»©c Ä‘á»™ khÃ³ khÄƒn khi tiáº¿p thu kiáº¿n thá»©c
-          - Hiá»‡u quáº£ ghi nhá»› kiáº¿n thá»©c
-            - Ká»¹ nÄƒng váº­n dá»¥ng kiáº¿n thá»©c vÃ o thá»±c táº¿
 
-              ** PHáº¦N B: PHIáº¾U KHáº¢O SÃT SAU KHI ÃP Dá»¤NG SÃNG KIáº¾N **
+        Nội dung câu hĐi(10 - 12 câu):
 
-                Táº¡o báº£ng kháº£o sÃ¡t tÆ°Æ¡ng tá»± vá»›i 12 - 15 cÃ¢u há»i vá»:
-- Má»©c Ä‘á»™ há»©ng thÃº sau khi Ã¡p dá»¥ng sÃ¡ng kiáº¿n
-  - Hiá»‡u quáº£ cá»§a phÆ°Æ¡ng phÃ¡p má»›i
-    - Kháº£ nÄƒng tiáº¿p thu kiáº¿n thá»©c
-      - Sá»± cáº£i thiá»‡n káº¿t quáº£ há»c táº­p
-        - Mong muá»‘n tiáº¿p tá»¥c há»c theo phÆ°Æ¡ng phÃ¡p má»›i
+- Mức độ hứng thú với môn hĐc
 
-        â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-        ðŸ“‹ PHá»¤ Lá»¤C 2: PHIáº¾U KHáº¢O SÃT GIÃO VIÃŠN Vá»€ THá»°C TRáº NG Dáº Y Há»ŒC
-        â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-- Viáº¿t phiáº¿u kháº£o sÃ¡t HOÃ€N CHá»ˆNH vá»›i 10 - 15 cÃ¢u há»i
-  - Dáº¡ng cÃ¢u há»i: Tráº¯c nghiá»‡m má»©c Ä‘á»™(Ráº¥t thÆ°á»ng xuyÃªn / ThÆ°á»ng xuyÃªn / Thá»‰nh thoáº£ng / Hiáº¿m khi / KhÃ´ng bao giá»)
-    - Ná»™i dung: Kháº£o sÃ¡t thá»±c tráº¡ng sá»­ dá»¥ng phÆ°Æ¡ng phÃ¡p / cÃ´ng nghá»‡ liÃªn quan Ä‘áº¿n "${userInfo.topic}"
-      - Format: Báº£ng Markdown chuáº©n vá»›i Ä‘áº§y Ä‘á»§ cÃ¡c cá»™t
-        | STT | Ná»™i dung | Ráº¥t thÆ°á»ng xuyÃªn | ThÆ°á»ng xuyÃªn | Thá»‰nh thoáº£ng | Hiáº¿m khi | KhÃ´ng bao giá» |
+  - Cảm nhận vĐ phương pháp dạy hĐc hiện tại
+
+    - Mức độ tham gia hoạt động hĐc tập
+
+      - Khả năng tự hĐc, tự nghiên cứu
+
+        - Mức độ khó khăn khi tiếp thu kiến thức
+
+          - Hiệu quả ghi nhớ kiến thức
+
+            - Kỹ năng vận dụng kiến thức vào thực tế
+
+
+
+              ** PHẦN B: PHIẾU KHẢO SĐT SAU KHI ĐP DỤNG SĐNG KIẾN **
+
+
+
+                Tạo bảng khảo sát tương tự với 12 - 15 câu hĐi vĐ:
+
+- Mức độ hứng thú sau khi áp dụng sáng kiến
+
+  - Hiệu quả của phương pháp mới
+
+    - Khả năng tiếp thu kiến thức
+
+      - Sự cải thiện kết quả hĐc tập
+
+        - Mong muốn tiếp tục hĐc theo phương pháp mới
+
+
+
+        ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
+        📋 PHỤ LỤC 2: PHIẾU KHẢO SĐT GIĐO VIÊN VỀ THỰC TRẠNG DẠY HỌC
+
+        ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
+- Viết phiếu khảo sát HOÀN CHỈNH với 10 - 15 câu hĐi
+
+  - Dạng câu hĐi: Trắc nghiệm mức độ(Rất thưĐng xuyên / ThưĐng xuyên / Thỉnh thoảng / Hiếm khi / Không bao giĐ)
+
+    - Nội dung: Khảo sát thực trạng sử dụng phương pháp / công nghệ liên quan đến "${userInfo.topic}"
+
+      - Format: Bảng Markdown chuẩn với đầy đủ các cột
+
+        | STT | Nội dung | Rất thưĐng xuyên | ThưĐng xuyên | Thỉnh thoảng | Hiếm khi | Không bao giĐ |
+
         | -----| ----------| ------------------| --------------| --------------| ----------| ---------------|
+
         
-        â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-        ðŸ“‹ PHá»¤ Lá»¤C 3: GIÃO ÃN MINH Há»ŒA(Theo CÃ´ng vÄƒn 5512 / BGDÄT ngÃ y 18 / 12 / 2020)
-        â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+
+        ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
+        📋 PHỤ LỤC 3: GIĐO ĐN MINH HỌA(Theo Công văn 5512 / BGDĐT ngày 18 / 12 / 2020)
+
+        ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
         
-        ** KHUNG Káº¾ HOáº CH BÃ€I Dáº Y **
-  (KÃ¨m theo CÃ´ng vÄƒn sá»‘ 5512 / BGDÄT - GDTrH ngÃ y 18 thÃ¡ng 12 nÄƒm 2020 cá»§a Bá»™ GDÄT)
 
-TrÆ°á»ng: ${userInfo.school}
-Tá»•: [Tá»• chuyÃªn mÃ´n]
-        Há» vÃ  tÃªn giÃ¡o viÃªn: â€¦â€¦â€¦â€¦â€¦â€¦â€¦â€¦
+        ** KHUNG KẾ HOẠCH BÀI DẠY **
+
+  (Kèm theo Công văn số 5512 / BGDĐT - GDTrH ngày 18 tháng 12 năm 2020 của Bộ GDĐT)
+
+
+
+TrưĐng: ${userInfo.school}
+
+Tổ: [Tổ chuyên môn]
+
+        HĐ và tên giáo viên: ……………………
+
         
-        ** TÃŠN BÃ€I Dáº Y: [Chá»n má»™t bÃ i cá»¥ thá»ƒ tá»« SGK ${userInfo.textbook || "hiá»‡n hÃ nh"} phÃ¹ há»£p vá»›i Ä‘á» tÃ i] **
-  MÃ´n há»c: ${userInfo.subject}; Lá»›p: ${userInfo.grade}
-        Thá»i gian thá»±c hiá»‡n: [Sá»‘ tiáº¿t]
 
-  ** I.Má»¤C TIÃŠU **
+        ** TÊN BÀI DẠY: [ChĐn một bài cụ thể từ SGK ${userInfo.textbook || "hiện hành"} phù hợp với đĐ tài] **
 
-    1. Vá» kiáº¿n thá»©c:
-- NÃªu cá»¥ thá»ƒ ná»™i dung kiáº¿n thá»©c há»c sinh cáº§n há»c
+  Môn hĐc: ${userInfo.subject}; Lớp: ${userInfo.grade}
 
-2. Vá» nÄƒng lá»±c:
-- NÄƒng lá»±c chung: [Tá»± chá»§ vÃ  tá»± há»c, giao tiáº¿p vÃ  há»£p tÃ¡c, giáº£i quyáº¿t váº¥n Ä‘á»]
-  - NÄƒng lá»±c Ä‘áº·c thÃ¹: [NÄƒng lá»±c Ä‘áº·c thÃ¹ mÃ´n ${userInfo.subject}]
+        ThĐi gian thực hiện: [Số tiết]
 
-3. Vá» pháº©m cháº¥t:
-- TrÃ¡ch nhiá»‡m, chÄƒm chá»‰, trung thá»±c trong há»c táº­p
 
-  ** II.THIáº¾T Bá»Š Dáº Y Há»ŒC VÃ€ Há»ŒC LIá»†U **
-    - GiÃ¡o viÃªn: [Liá»‡t kÃª thiáº¿t bá»‹, tÃ i liá»‡u GV chuáº©n bá»‹]
-      - Há»c sinh: [Liá»‡t kÃª nhá»¯ng gÃ¬ HS cáº§n chuáº©n bá»‹]
-        - Äiá»u kiá»‡n CSVC: ${userInfo.facilities}
+
+  ** I.MỤC TIÊU **
+
+
+
+    1. VĐ kiến thức:
+
+- Nêu cụ thể nội dung kiến thức hĐc sinh cần hĐc
+
+
+
+2. VĐ năng lực:
+
+- Năng lực chung: [Tự chủ và tự hĐc, giao tiếp và hợp tác, giải quyết vấn đĐ]
+
+  - Năng lực đặc thù: [Năng lực đặc thù môn ${userInfo.subject}]
+
+
+
+3. VĐ phẩm chất:
+
+- Trách nhiệm, chăm chỉ, trung thực trong hĐc tập
+
+
+
+  ** II.THIẾT BỊ DẠY HỌC VÀ HỌC LIỆU **
+
+    - Giáo viên: [Liệt kê thiết bị, tài liệu GV chuẩn bị]
+
+      - HĐc sinh: [Liệt kê những gì HS cần chuẩn bị]
+
+        - ĐiĐu kiện CSVC: ${userInfo.facilities}
+
         
-        ** III.TIáº¾N TRÃŒNH Dáº Y Há»ŒC **
+
+        ** III.TIẾN TRÌNH DẠY HỌC **
+
         
-        ** 1. Hoáº¡t Ä‘á»™ng 1: Má»Ÿ Ä‘áº§u / Khá»Ÿi Ä‘á»™ng(...phÃºt) **
-  a) Má»¥c tiÃªu: Táº¡o há»©ng thÃº, xÃ¡c Ä‘á»‹nh váº¥n Ä‘á» / nhiá»‡m vá»¥ há»c táº­p
-        b) Ná»™i dung: [MÃ´ táº£ cá»¥ thá»ƒ hoáº¡t Ä‘á»™ng]
-        c) Sáº£n pháº©m: [Káº¿t quáº£ há»c sinh Ä‘áº¡t Ä‘Æ°á»£c]
-        d) Tá»• chá»©c thá»±c hiá»‡n:
-- Giao nhiá»‡m vá»¥: [GV giao nhiá»‡m vá»¥ cá»¥ thá»ƒ]
-  - Thá»±c hiá»‡n: [HS thá»±c hiá»‡n, GV theo dÃµi há»— trá»£]
-    - BÃ¡o cÃ¡o, tháº£o luáº­n: [HS bÃ¡o cÃ¡o, GV tá»• chá»©c tháº£o luáº­n]
-      - Káº¿t luáº­n, nháº­n Ä‘á»‹nh: [GV káº¿t luáº­n, chuyá»ƒn tiáº¿p]
 
-        ** 2. Hoáº¡t Ä‘á»™ng 2: HÃ¬nh thÃ nh kiáº¿n thá»©c má»›i(...phÃºt) **
-          a) Má»¥c tiÃªu: GiÃºp HS chiáº¿m lÄ©nh kiáº¿n thá»©c má»›i
-        b) Ná»™i dung: [MÃ´ táº£ cá»¥ thá»ƒ cÃ¡c nhiá»‡m vá»¥ há»c táº­p]
-        c) Sáº£n pháº©m: [Kiáº¿n thá»©c, ká»¹ nÄƒng HS cáº§n Ä‘áº¡t Ä‘Æ°á»£c]
-        d) Tá»• chá»©c thá»±c hiá»‡n:
-- Giao nhiá»‡m vá»¥: [Chi tiáº¿t]
-  - Thá»±c hiá»‡n: [Chi tiáº¿t - TÃCH Há»¢P CÃ”NG Cá»¤ / PHÆ¯Æ NG PHÃP Cá»¦A GIáº¢I PHÃP 1]
-    - BÃ¡o cÃ¡o, tháº£o luáº­n: [Chi tiáº¿t]
-      - Káº¿t luáº­n, nháº­n Ä‘á»‹nh: [Chi tiáº¿t]
+        ** 1. Hoạt động 1: Mở đầu / Khởi động(...phút) **
 
-        ** 3. Hoáº¡t Ä‘á»™ng 3: Luyá»‡n táº­p(...phÃºt) **
-          a) Má»¥c tiÃªu: Cá»§ng cá»‘, váº­n dá»¥ng kiáº¿n thá»©c Ä‘Ã£ há»c
-        b) Ná»™i dung: [Há»‡ thá»‘ng cÃ¢u há»i, bÃ i táº­p]
-        c) Sáº£n pháº©m: [ÄÃ¡p Ã¡n, lá»i giáº£i cá»§a HS]
-        d) Tá»• chá»©c thá»±c hiá»‡n: [Chi tiáº¿t cÃ¡c bÆ°á»›c]
+  a) Mục tiêu: Tạo hứng thú, xác định vấn đĐ / nhiệm vụ hĐc tập
 
-  ** 4. Hoáº¡t Ä‘á»™ng 4: Váº­n dá»¥ng(...phÃºt) **
-    a) Má»¥c tiÃªu: PhÃ¡t triá»ƒn nÄƒng lá»±c váº­n dá»¥ng vÃ o thá»±c tiá»…n
-        b) Ná»™i dung: [Nhiá»‡m vá»¥ / tÃ¬nh huá»‘ng thá»±c tiá»…n]
-        c) Sáº£n pháº©m: [BÃ¡o cÃ¡o, sáº£n pháº©m cá»§a HS]
-        d) Tá»• chá»©c thá»±c hiá»‡n: [Giao vá» nhÃ  hoáº·c thá»±c hiá»‡n trÃªn lá»›p]
+        b) Nội dung: [Mô tả cụ thể hoạt động]
 
-        â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-        ðŸ“‹ PHá»¤ Lá»¤C 4: PHIáº¾U Há»ŒC Táº¬P / RUBRIC ÄÃNH GIÃ
-        â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-- Phiáº¿u há»c táº­p máº«u cho hoáº¡t Ä‘á»™ng nhÃ³m
-  - Rubric Ä‘Ã¡nh giÃ¡ sáº£n pháº©m há»c sinh(theo 4 má»©c: Tá»‘t, KhÃ¡, Äáº¡t, ChÆ°a Ä‘áº¡t)
-    - Báº£ng tiÃªu chÃ­ Ä‘Ã¡nh giÃ¡ vá»›i cÃ¡c má»©c Ä‘á»™ rÃµ rÃ ng
+        c) Sản phẩm: [Kết quả hĐc sinh đạt được]
 
-        â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-        ðŸ“‹ PHá»¤ Lá»¤C 5: BÃ€I Táº¬P MáºªU / CÃ‚U Há»ŽI Ã”N Táº¬P
-        â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-- 5 - 7 bÃ i táº­p máº«u / cÃ¢u há»i Ã´n táº­p
-  - CÃ³ Ä‘Ã¡p Ã¡n vÃ  hÆ°á»›ng dáº«n cháº¥m Ä‘iá»ƒm
-    - Náº¿u mÃ´n ToÃ¡n: Sá»­ dá»¥ng LaTeX cho cÃ´ng thá»©c
+        d) Tổ chức thực hiện:
 
-        â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-        ðŸ“‹ PHá»¤ Lá»¤C 6: Báº¢NG Tá»”NG Há»¢P Káº¾T QUáº¢ KHáº¢O SÃT(MINH CHá»¨NG CHO Báº¢NG Dá»® LIá»†U SKKN)
-        â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-- Báº£ng tá»•ng há»£p káº¿t quáº£ kháº£o sÃ¡t TRÆ¯á»šC thá»±c nghiá»‡m(sá»‘ lÆ°á»£ng, tá»· lá»‡ %)
-  - Báº£ng tá»•ng há»£p káº¿t quáº£ kháº£o sÃ¡t SAU thá»±c nghiá»‡m
-    - Báº£ng so sÃ¡nh káº¿t quáº£ TRÆ¯á»šC - SAU Ä‘á»ƒ minh chá»©ng cho cÃ¡c báº£ng sá»‘ liá»‡u trong SKKN
-      - Sá»‘ liá»‡u pháº£i LOGIC vÃ  KHá»šP vá»›i cÃ¡c báº£ng trong pháº§n Káº¿t quáº£ cá»§a SKKN
+- Giao nhiệm vụ: [GV giao nhiệm vụ cụ thể]
 
-        â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-        âš ï¸ YÃŠU Cáº¦U FORMAT VÃ€ Ná»˜I DUNG(Báº®T BUá»˜C):
-        â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+  - Thực hiện: [HS thực hiện, GV theo dõi hỗ trợ]
+
+    - Báo cáo, thảo luận: [HS báo cáo, GV tổ chức thảo luận]
+
+      - Kết luận, nhận định: [GV kết luận, chuyển tiếp]
+
+
+
+        ** 2. Hoạt động 2: Hình thành kiến thức mới(...phút) **
+
+          a) Mục tiêu: Giúp HS chiếm lĩnh kiến thức mới
+
+        b) Nội dung: [Mô tả cụ thể các nhiệm vụ hĐc tập]
+
+        c) Sản phẩm: [Kiến thức, kỹ năng HS cần đạt được]
+
+        d) Tổ chức thực hiện:
+
+- Giao nhiệm vụ: [Chi tiết]
+
+  - Thực hiện: [Chi tiết - TĐCH HỢP CÔNG CỤ / PHƯƠNG PHĐP CỦA GIẢI PHĐP 1]
+
+    - Báo cáo, thảo luận: [Chi tiết]
+
+      - Kết luận, nhận định: [Chi tiết]
+
+
+
+        ** 3. Hoạt động 3: Luyện tập(...phút) **
+
+          a) Mục tiêu: Củng cố, vận dụng kiến thức đã hĐc
+
+        b) Nội dung: [Hệ thống câu hĐi, bài tập]
+
+        c) Sản phẩm: [Đáp án, lĐi giải của HS]
+
+        d) Tổ chức thực hiện: [Chi tiết các bước]
+
+
+
+  ** 4. Hoạt động 4: Vận dụng(...phút) **
+
+    a) Mục tiêu: Phát triển năng lực vận dụng vào thực tiễn
+
+        b) Nội dung: [Nhiệm vụ / tình huống thực tiễn]
+
+        c) Sản phẩm: [Báo cáo, sản phẩm của HS]
+
+        d) Tổ chức thực hiện: [Giao vĐ nhà hoặc thực hiện trên lớp]
+
+
+
+        ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
+        📋 PHỤ LỤC 4: PHIẾU HỌC TẬP / RUBRIC ĐĐNH GIĐ
+
+        ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
+- Phiếu hĐc tập mẫu cho hoạt động nhóm
+
+  - Rubric đánh giá sản phẩm hĐc sinh(theo 4 mức: Tốt, Khá, Đạt, Chưa đạt)
+
+    - Bảng tiêu chí đánh giá với các mức độ rõ ràng
+
+
+
+        ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
+        📋 PHỤ LỤC 5: BÀI TẬP MẪU / CÂU HỎI ÔN TẬP
+
+        ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
+- 5 - 7 bài tập mẫu / câu hĐi ôn tập
+
+  - Có đáp án và hướng dẫn chấm điểm
+
+    - Nếu môn Toán: Sử dụng LaTeX cho công thức
+
+
+
+        ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
+        📋 PHỤ LỤC 6: BẢNG TỔNG HỢP KẾT QUẢ KHẢO SĐT(MINH CHỨNG CHO BẢNG DỮ LIỆU SKKN)
+
+        ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
+- Bảng tổng hợp kết quả khảo sát TRƯỚC thực nghiệm(số lượng, tỷ lệ %)
+
+  - Bảng tổng hợp kết quả khảo sát SAU thực nghiệm
+
+    - Bảng so sánh kết quả TRƯỚC - SAU để minh chứng cho các bảng số liệu trong SKKN
+
+      - Số liệu phải LOGIC và KHỚP với các bảng trong phần Kết quả của SKKN
+
+
+
+        ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
+        ⚠Đ YÊU CẦU FORMAT VÀ NỘI DUNG(BẮT BUỘC):
+
+        ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
         
-        ðŸ“Œ Vá»€ Ná»˜I DUNG:
-- VIáº¾T Äáº¦Y Äá»¦ Ná»˜I DUNG thá»±c táº¿ cho tá»«ng phá»¥ lá»¥c, KHÃ”NG viáº¿t táº¯t hay bá» sÃ³t
-  - Phiáº¿u kháº£o sÃ¡t pháº£i cÃ³ Äáº¦Y Äá»¦ 10 - 15 cÃ¢u há»i cá»¥ thá»ƒ(khÃ´ng ghi "...")
-    - GiÃ¡o Ã¡n minh há»a pháº£i VIáº¾T CHI TIáº¾T tá»«ng hoáº¡t Ä‘á»™ng, cÃ³ lá»i thoáº¡i GV - HS máº«u
-      - Rubric pháº£i cÃ³ Äáº¦Y Äá»¦ tiÃªu chÃ­ vÃ  mÃ´ táº£ cÃ¡c má»©c Ä‘á»™
-        - BÃ i táº­p máº«u pháº£i cÃ³ Äáº¦Y Äá»¦ Ä‘á» bÃ i vÃ  Ä‘Ã¡p Ã¡n / hÆ°á»›ng dáº«n giáº£i
-          - Sá»‘ liá»‡u báº£ng tá»•ng há»£p pháº£i KHá»šP vá»›i sá»‘ liá»‡u trong pháº§n Káº¿t quáº£ SKKN
-            - Náº¿u dÃ n Ã½ SKKN cÃ³ Ä‘á» cáº­p phá»¥ lá»¥c khÃ¡c(chÆ°a liá»‡t kÃª á»Ÿ trÃªn), hÃ£y Táº O THÃŠM
+
+        📌 VỀ NỘI DUNG:
+
+- VIẾT ĐẦY ĐỦ NỘI DUNG thực tế cho từng phụ lục, KHÔNG viết tắt hay bĐ sót
+
+  - Phiếu khảo sát phải có ĐẦY ĐỦ 10 - 15 câu hĐi cụ thể(không ghi "...")
+
+    - Giáo án minh hĐa phải VIẾT CHI TIẾT từng hoạt động, có lĐi thoại GV - HS mẫu
+
+      - Rubric phải có ĐẦY ĐỦ tiêu chí và mô tả các mức độ
+
+        - Bài tập mẫu phải có ĐẦY ĐỦ đĐ bài và đáp án / hướng dẫn giải
+
+          - Số liệu bảng tổng hợp phải KHỚP với số liệu trong phần Kết quả SKKN
+
+            - Nếu dàn ý SKKN có đĐ cập phụ lục khác(chưa liệt kê ở trên), hãy TẠO THÊM
+
         
-        ðŸ“Œ Vá»€ FORMAT:
-- Markdown chuáº©n, báº£ng dÃ¹ng | ---|
-  - Báº¢NG PHáº¢I CÃ“ Äáº¦Y Äá»¦ Táº¤T Cáº¢ CÃC Cá»˜T, khÃ´ng Ä‘Æ°á»£c bá» sÃ³t cá»™t nÃ o
-    - Má»—i hÃ ng trong báº£ng pháº£i cÃ³ Ä‘á»§ sá»‘ Ã´ tÆ°Æ¡ng á»©ng vá»›i sá»‘ cá»™t á»Ÿ header
-      - Báº£ng pháº£i báº¯t Ä‘áº§u tá»« Ä‘áº§u dÃ²ng(khÃ´ng thá»¥t lá»)
-        - Xuá»‘ng dÃ²ng sau má»—i cÃ¢u
-          - TÃ¡ch Ä‘oáº¡n rÃµ rÃ ng
-            - ÄÃ¡nh sá»‘ phá»¥ lá»¥c rÃµ rÃ ng: PHá»¤ Lá»¤C 1, PHá»¤ Lá»¤C 2...
-        - KHÃ”NG ghi "...", "[ná»™i dung]", "[Ä‘iá»n vÃ o]" - pháº£i viáº¿t ná»™i dung thá»±c táº¿
+
+        📌 VỀ FORMAT:
+
+- Markdown chuẩn, bảng dùng | ---|
+
+  - BẢNG PHẢI CÓ ĐẦY ĐỦ TẤT CẢ CĐC CỘT, không được bĐ sót cột nào
+
+    - Mỗi hàng trong bảng phải có đủ số ô tương ứng với số cột ở header
+
+      - Bảng phải bắt đầu từ đầu dòng(không thụt lĐ)
+
+        - Xuống dòng sau mỗi câu
+
+          - Tách đoạn rõ ràng
+
+            - Đánh số phụ lục rõ ràng: PHỤ LỤC 1, PHỤ LỤC 2...
+
+        - KHÔNG ghi "...", "[nội dung]", "[điĐn vào]" - phải viết nội dung thực tế
+
         
-        ðŸ“Œ KHÃ”NG Táº O:
-- Phá»¥ lá»¥c hÃ¬nh áº£nh, video, áº£nh chá»¥p mÃ n hÃ¬nh(khÃ´ng thá»ƒ hiá»ƒn thá»‹)
-  - Phá»¥ lá»¥c yÃªu cáº§u file Ä‘Ã­nh kÃ¨m
+
+        📌 KHÔNG TẠO:
+
+- Phụ lục hình ảnh, video, ảnh chụp màn hình(không thể hiển thị)
+
+  - Phụ lục yêu cầu file đính kèm
+
         
-        ðŸ“ Káº¾T THÃšC báº±ng dÃ²ng:
-        â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-        âœ… HOÃ€N THÃ€NH Táº O TÃ€I LIá»†U PHá»¤ Lá»¤C
-        â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”`;
+
+        Đ KẾT THÚC bằng dòng:
+
+        ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+
+        ✅ HOÀN THÀNH TẠO TÀI LIỆU PHỤ LỤC
+
+        ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ`;
+
+
 
       let generatedAppendix = "";
+
       await sendMessageStream(appendixPrompt, (chunk) => {
+
         generatedAppendix += chunk;
+
         setAppendixDocument(generatedAppendix);
+
       });
 
+
+
       setIsAppendixLoading(false);
+
     } catch (error: any) {
+
       console.error('Generate Appendix error:', error);
-      alert('CÃ³ lá»—i khi táº¡o phá»¥ lá»¥c. Vui lÃ²ng thá»­ láº¡i.');
+
+      alert('Có lỗi khi tạo phụ lục. Vui lòng thử lại.');
+
       setIsAppendixLoading(false);
+
     }
+
   };
 
-  // Export Appendix to Word - Xuáº¥t phá»¥ lá»¥c thÃ nh file Word riÃªng
+
+
+  // Export Appendix to Word - Xuất phụ lục thành file Word riêng
+
   const exportAppendixToWord = async () => {
+
     try {
+
       const { exportMarkdownToDocx } = await import('./services/docxExporter');
+
       const filename = `SKKN_Phuluc_${userInfo.topic.substring(0, 30).replace(/[^a-zA-Z0-9\u00C0-\u1EF9]/g, '_')}.docx`;
+
       await exportMarkdownToDocx(appendixDocument, filename);
+
     } catch (error: any) {
+
       console.error('Export Appendix error:', error);
-      alert('CÃ³ lá»—i khi xuáº¥t file phá»¥ lá»¥c. Vui lÃ²ng thá»­ láº¡i.');
+
+      alert('Có lỗi khi xuất file phụ lục. Vui lòng thử lại.');
+
     }
+
   };
+
+
 
   // Render Logic
+
   const renderSidebar = () => {
+
     return (
+
       <div className="w-full lg:w-80 bg-gradient-to-b from-white to-sky-50 border-r border-sky-100 p-6 flex-shrink-0 flex flex-col h-full overflow-y-auto shadow-[4px_0_24px_rgba(56,189,248,0.08)]">
+
         <div className="mb-8">
+
           <h1 className="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-orange-600 to-sky-500 flex items-center gap-2" style={{ fontFamily: 'Nunito, sans-serif' }}>
+
             <Wand2 className="h-6 w-6 text-orange-500" />
-            SKKN 2026 PRO
+
+            SKKN 2026 PRO V2
+
           </h1>
-          <p className="text-xs text-orange-800 font-medium mt-1.5 tracking-wide">âœ¨ Trá»£ lÃ½ viáº¿t SKKN thÃ´ng minh</p>
+
+          <p className="text-xs text-orange-800 font-medium mt-1.5 tracking-wide">✨ TRỢ LÝ VIẾT MỌI MẪU SKKN CÁC SỞ</p>
+
         </div>
+
+
 
         {/* Progress Stepper */}
+
         <div className="space-y-6">
+
           {Object.entries(currentStepsInfo).map(([key, info]) => {
+
             const stepNum = parseInt(key);
 
+
+
             if (isCustomFlow) {
+
               const appendixStep = 2 + validCustomSections.length;
-              if (stepNum >= appendixStep) return null; // áº¨n Phá»¥ lá»¥c vÃ  HoÃ n táº¥t trÃªn sidebar
+
+              if (stepNum >= appendixStep) return null; // Ẩn Phụ lục và Hoàn tất trên sidebar
+
             } else {
-              // LuÃ´n áº©n step Phá»¥ lá»¥c (15) vÃ  HoÃ n táº¥t (16)
+
+              // Luôn ẩn step Phụ lục (15) và Hoàn tất (16)
+
               if (stepNum > 14) return null;
-              // áº¨n step Giáº£i phÃ¡p 4,5 vÃ  Review GP4/5 (step 10-13) vÃ  Pháº§n V-VI (step 14) náº¿u khÃ´ng chá»n
+
+              // Ẩn step Giải pháp 4,5 và Review GP4/5 (step 10-13) và Phần V-VI (step 14) nếu không chĐn
+
               if (stepNum >= 10 && stepNum <= 14 && (userInfo.numSolutions || 3) <= 3) return null;
+
             }
+
+
 
             let statusColor = "text-gray-400 border-gray-200";
+
             let icon = <div className="w-2 h-2 rounded-full bg-gray-300" />;
 
+
+
             // ERROR STATE HANDLING
+
             if (state.error && state.step === stepNum) {
+
               statusColor = "text-red-600 border-red-600 bg-red-50";
+
               icon = <AlertTriangle className="w-4 h-4 text-red-600" />;
-            }
-            else if (state.step === stepNum && state.isStreaming) {
-              statusColor = "text-sky-600 border-sky-600 bg-sky-50";
-              icon = <div className="w-2 h-2 rounded-full bg-sky-500 animate-ping" />;
-            } else if (state.step > stepNum) {
-              statusColor = "text-sky-800 border-sky-200";
-              icon = <CheckCircle className="w-4 h-4 text-sky-600" />;
-            } else if (state.step === stepNum) {
-              statusColor = "text-sky-600 border-sky-600 font-bold";
-              icon = <div className="w-2 h-2 rounded-full bg-sky-600" />;
+
             }
 
-            // Cho phÃ©p click vÃ o cÃ¡c step Ä‘Ã£ hoÃ n thÃ nh Ä‘á»ƒ quay láº¡i sá»­a
+            else if (state.step === stepNum && state.isStreaming) {
+
+              statusColor = "text-sky-600 border-sky-600 bg-sky-50";
+
+              icon = <div className="w-2 h-2 rounded-full bg-sky-500 animate-ping" />;
+
+            } else if (state.step > stepNum) {
+
+              statusColor = "text-sky-800 border-sky-200";
+
+              icon = <CheckCircle className="w-4 h-4 text-sky-600" />;
+
+            } else if (state.step === stepNum) {
+
+              statusColor = "text-sky-600 border-sky-600 font-bold";
+
+              icon = <div className="w-2 h-2 rounded-full bg-sky-600" />;
+
+            }
+
+
+
+            // Cho phép click vào các step đã hoàn thành để quay lại sửa
+
             const isClickable = state.step > stepNum && !state.isStreaming;
+
             const handleStepClick = () => {
+
               if (isClickable) {
+
                 setState(prev => ({ ...prev, step: stepNum }));
+
               }
+
             };
 
+
+
             return (
+
               <div
+
                 key={key}
+
                 onClick={handleStepClick}
+
                 className={`flex items - start pl - 4 border - l - 2 ${statusColor.includes('border-sky') ? 'border-sky-500' : statusColor.includes('border-red') ? 'border-red-500' : 'border-gray-200'} py - 1 transition - all ${isClickable ? 'cursor-pointer hover:bg-sky-50 rounded-r-lg' : ''} `}
+
               >
+
                 <div className="flex-1">
+
                   <h4 className={`text - sm ${statusColor.includes('text-sky') ? 'text-sky-900' : statusColor.includes('text-red') ? 'text-red-700' : 'text-gray-500'} font - medium`}>
-                    {state.error && state.step === stepNum ? "ÄÃ£ dá»«ng do lá»—i" : info.label}
+
+                    {state.error && state.step === stepNum ? "Đã dừng do lỗi" : info.label}
+
                   </h4>
+
                   <p className="text-xs text-gray-400">{info.description}</p>
+
                 </div>
+
                 <div className="ml-2 mt-1">
+
                   {icon}
+
                 </div>
+
               </div>
+
             );
+
           })}
+
         </div>
+
+
 
         <div className="mt-auto pt-6 border-t border-gray-100">
+
           {state.step > GenerationStep.INPUT_FORM && (
+
             <div className="space-y-3">
+
               <div className="p-3 bg-gray-50 rounded text-xs text-gray-500 border border-gray-100">
-                <span className="font-bold block text-gray-900">Äá» tÃ i:</span>
+
+                <span className="font-bold block text-gray-900">ĐĐ tài:</span>
+
                 {userInfo.topic}
+
               </div>
+
+
 
               {/* Session persistence buttons */}
+
               <div className="flex gap-2">
+
                 <button
+
                   onClick={saveSession}
+
                   className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-xs font-medium transition-colors border border-emerald-200"
-                  title="LÆ°u phiÃªn lÃ m viá»‡c"
+
+                  title="Lưu phiên làm việc"
+
                 >
+
                   <Save size={13} />
-                  LÆ°u phiÃªn
+
+                  Lưu phiên
+
                 </button>
+
                 <button
+
                   onClick={() => {
-                    if (confirm('XÃ³a phiÃªn Ä‘Ã£ lÆ°u? Báº¡n sáº½ khÃ´ng thá»ƒ khÃ´i phá»¥c láº¡i.')) {
+
+                    if (confirm('Xóa phiên đã lưu? Bạn sẽ không thể khôi phục lại.')) {
+
                       clearSavedSession();
+
                     }
+
                   }}
+
                   className="flex items-center justify-center gap-1.5 px-3 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-xs font-medium transition-colors border border-red-200"
-                  title="XÃ³a phiÃªn Ä‘Ã£ lÆ°u"
+
+                  title="Xóa phiên đã lưu"
+
                 >
+
                   <Trash2 size={13} />
+
                 </button>
+
               </div>
+
               {sessionSavedAt && (
+
                 <p className="text-[10px] text-gray-400 text-center">
-                  ðŸ’¾ LÆ°u lÃºc {sessionSavedAt}
+
+                  💾 Lưu lúc {sessionSavedAt}
+
                 </p>
+
               )}
+
+
 
               {/* Controls */}
+
               {state.isStreaming ? (
-                <Button disabled className="w-full" isLoading>Äang viáº¿t...</Button>
+
+                <Button disabled className="w-full" isLoading>Đang viết...</Button>
+
               ) : (
+
                 state.step < GenerationStep.COMPLETED && (
+
                   <>
+
                     {/* Feedback / Review Section only for OUTLINE Step */}
+
                     {state.step === GenerationStep.OUTLINE && (
+
                       <div className="mb-2 space-y-2 border-t border-gray-100 pt-2">
-                        <p className="text-sm font-semibold text-sky-700">Äiá»u chá»‰nh:</p>
+
+                        <p className="text-sm font-semibold text-sky-700">ĐiĐu chỉnh:</p>
+
+
 
                         <div className="text-xs text-gray-500 italic mb-2">
-                          ðŸ’¡ Máº¹o: Báº¡n cÃ³ thá»ƒ sá»­a trá»±c tiáº¿p DÃ n Ã½ á»Ÿ mÃ n hÃ¬nh bÃªn pháº£i trÆ°á»›c khi báº¥m "Chá»‘t & Viáº¿t tiáº¿p".
+
+                          💡 Mẹo: Bạn có thể sửa trực tiếp Dàn ý ở màn hình bên phải trước khi bấm "Chốt & Viết tiếp".
+
                         </div>
 
+
+
                         <textarea
+
                           value={outlineFeedback}
+
                           onChange={(e) => setOutlineFeedback(e.target.value)}
-                          placeholder="Hoáº·c nháº­p yÃªu cáº§u Ä‘á»ƒ AI viáº¿t láº¡i..."
+
+                          placeholder="Hoặc nhập yêu cầu để AI viết lại..."
+
                           className="w-full p-2 text-sm border border-gray-300 rounded focus:ring-sky-500 focus:border-sky-500"
+
                           rows={3}
+
                         />
+
                         <Button
+
                           variant="secondary"
+
                           onClick={regenerateOutline}
+
                           disabled={!outlineFeedback.trim()}
+
                           className="w-full text-sm"
+
                           icon={<RefreshCw size={14} />}
+
                         >
-                          YÃªu cáº§u AI viáº¿t láº¡i
+
+                          Yêu cầu AI viết lại
+
                         </Button>
+
                       </div>
+
                     )}
 
+
+
                     <Button onClick={generateNextSection} className="w-full" icon={<ChevronRight size={16} />}>
-                      {state.step === GenerationStep.OUTLINE ? 'Chá»‘t DÃ n Ã½ & Viáº¿t tiáº¿p' : 'Viáº¿t pháº§n tiáº¿p theo'}
+
+                      {state.step === GenerationStep.OUTLINE ? 'Chốt Dàn ý & Viết tiếp' : 'Viết phần tiếp theo'}
+
                     </Button>
+
                   </>
+
                 )
+
               )}
 
-              {/* NÃºt xuáº¥t Word SKKN (luÃ´n hiá»ƒn thá»‹ khi Ä‘Ã£ cÃ³ ná»™i dung) */}
+
+
+              {/* Nút xuất Word SKKN (luôn hiển thị khi đã có nội dung) */}
+
               {(state.step >= GenerationStep.OUTLINE) && (
+
                 <Button variant="secondary" onClick={exportToWord} className="w-full" icon={<Download size={16} />}>
-                  Xuáº¥t file Word SKKN
+
+                  Xuất file Word SKKN
+
                 </Button>
+
               )}
 
-              {/* Sau khi hoÃ n thÃ nh SKKN: hiá»ƒn thá»‹ cÃ¡c nÃºt phá»¥ lá»¥c */}
+
+
+              {/* Sau khi hoàn thành SKKN: hiển thị các nút phụ lục */}
+
               {state.step >= GenerationStep.COMPLETED && (
+
                 <>
+
                   {!appendixDocument ? (
+
                     <Button
+
                       onClick={generateAppendix}
+
                       isLoading={isAppendixLoading}
+
                       className="w-full bg-emerald-600 hover:bg-emerald-700"
+
                       icon={<FileText size={16} />}
+
                     >
-                      {isAppendixLoading ? 'Äang táº¡o phá»¥ lá»¥c...' : 'Táº O PHá»¤ Lá»¤C'}
+
+                      {isAppendixLoading ? 'Đang tạo phụ lục...' : 'TẠO PHỤ LỤC'}
+
                     </Button>
+
                   ) : (
+
                     <Button
+
                       variant="secondary"
+
                       onClick={exportAppendixToWord}
+
                       className="w-full border-emerald-500 text-emerald-700 hover:bg-emerald-50"
+
                       icon={<Download size={16} />}
+
                     >
-                      Xuáº¥t Word Phá»¥ lá»¥c
+
+                      Xuất Word Phụ lục
+
                     </Button>
+
                   )}
+
                 </>
+
               )}
+
             </div>
+
           )}
+
         </div>
+
       </div>
+
     );
+
   };
 
-  // Handler: Template analyzed â†’ go to SETUP_INFO
+
+
+  // Handler: Template analyzed → go to SETUP_INFO
+
   const handleTemplateAnalyzed = useCallback((rawContent: string, template: SKKNTemplate | null, fileName: string) => {
+
     // Save to userInfo
+
     handleUserChange('skknTemplate', rawContent);
+
     if (template) {
+
       handleUserChange('customTemplate', JSON.stringify(template) as any);
+
       setTemplateSectionsCount(template.sections.length);
 
-      // Auto-fill pageLimit náº¿u máº«u ghi rÃµ sá»‘ trang
+
+
+      // Auto-fill pageLimit nếu mẫu ghi rõ số trang
+
       if (template.pageLimitFromTemplate && template.pageLimitFromTemplate > 0) {
+
         handleUserChange('pageLimit', template.pageLimitFromTemplate as any);
+
       }
+
     }
+
     setTemplateFileName(fileName);
+
     setWizardStep(WizardStep.SETUP_INFO);
+
   }, [handleUserChange]);
 
-  // Handler: Skip template â†’ go to SETUP_INFO with no template
+
+
+  // Handler: Skip template → go to SETUP_INFO with no template
+
   const handleSkipTemplate = useCallback(() => {
+
     setTemplateFileName('');
+
     setTemplateSectionsCount(0);
+
     setWizardStep(WizardStep.SETUP_INFO);
+
   }, []);
 
+
+
   if (checkingAuth) {
+
     return <div className="h-screen w-screen bg-white flex items-center justify-center"></div>;
+
   }
+
+
 
   if (!isUnlocked) {
+
     return <LockScreen onLogin={handleLogin} />;
+
   }
+
+
 
   // Wizard Step 0: Upload Template
+
   if (wizardStep === WizardStep.UPLOAD_TEMPLATE) {
+
     return (
+
       <>
+
         <ApiKeyModal
+
           isOpen={showApiModal}
+
           onSave={handleSaveApiKey}
+
           onClose={() => setShowApiModal(false)}
+
           isDismissible={!!apiKey}
+
         />
+
         <TemplateUploadStep
+
           apiKey={apiKey}
+
           selectedModel={selectedModel}
+
           onTemplateAnalyzed={handleTemplateAnalyzed}
+
           onSkipTemplate={handleSkipTemplate}
+
         />
+
       </>
+
     );
+
   }
 
+
+
   return (
+
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-orange-50 to-indigo-100 flex flex-col lg:flex-row font-sans text-gray-900">
+
       <ApiKeyModal
+
         isOpen={showApiModal}
+
         onSave={handleSaveApiKey}
+
         onClose={() => setShowApiModal(false)}
+
         isDismissible={!!apiKey}
+
       />
 
 
 
+
+
+
+
       {/* Session Restore Modal */}
+
       {showRestoreModal && pendingSessionData && (
+
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+
           <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 overflow-hidden">
+
             <div className="bg-gradient-to-r from-orange-500 to-sky-500 p-6 text-white">
+
               <div className="flex items-center gap-3">
+
                 <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
+
                   <Save className="w-6 h-6" />
+
                 </div>
+
                 <div>
-                  <h3 className="text-lg font-bold">KhÃ´i phá»¥c phiÃªn lÃ m viá»‡c</h3>
-                  <p className="text-sm text-orange-100">Báº¡n cÃ³ phiÃªn lÃ m viá»‡c chÆ°a hoÃ n thÃ nh</p>
+
+                  <h3 className="text-lg font-bold">Khôi phục phiên làm việc</h3>
+
+                  <p className="text-sm text-orange-100">Bạn có phiên làm việc chưa hoàn thành</p>
+
                 </div>
+
               </div>
+
             </div>
+
             <div className="p-6">
+
               <div className="bg-sky-50 border border-sky-200 rounded-lg p-4 mb-4">
+
                 <p className="text-sm text-gray-700">
-                  <span className="font-semibold text-sky-800">Äá» tÃ i:</span>{' '}
-                  {(pendingSessionData.userInfo as any).topic || 'KhÃ´ng rÃµ'}
+
+                  <span className="font-semibold text-sky-800">ĐĐ tài:</span>{' '}
+
+                  {(pendingSessionData.userInfo as any).topic || 'Không rõ'}
+
                 </p>
+
                 <p className="text-xs text-gray-500 mt-1">
-                  ÄÃ£ lÆ°u lÃºc: {new Date(pendingSessionData.savedAt).toLocaleString('vi-VN')}
+
+                  Đã lưu lúc: {new Date(pendingSessionData.savedAt).toLocaleString('vi-VN')}
+
                 </p>
+
                 <p className="text-xs text-gray-500 mt-1">
-                  Tiáº¿n Ä‘á»™: BÆ°á»›c {pendingSessionData.state.step} / {GenerationStep.COMPLETED}
+
+                  Tiến độ: Bước {pendingSessionData.state.step} / {GenerationStep.COMPLETED}
+
                 </p>
+
               </div>
+
               <div className="flex gap-3">
+
                 <button
+
                   onClick={() => {
+
                     setShowRestoreModal(false);
+
                     clearSavedSession();
+
                     setPendingSessionData(null);
+
                   }}
+
                   className="flex-1 px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-medium transition-colors text-sm"
+
                 >
-                  âœ– Báº¯t Ä‘áº§u má»›i
+
+                  ✖ Bắt đầu mới
+
                 </button>
+
                 <button
+
                   onClick={() => {
+
                     restoreSession(pendingSessionData);
+
                     setShowRestoreModal(false);
+
                     setPendingSessionData(null);
+
                   }}
+
                   className="flex-1 px-4 py-3 bg-gradient-to-r from-orange-500 to-sky-500 hover:from-orange-600 hover:to-sky-600 text-white rounded-xl font-bold transition-colors text-sm shadow-lg"
+
                 >
-                  âœ” Tiáº¿p tá»¥c lÃ m
+
+                  ✔ Tiếp tục làm
+
                 </button>
+
               </div>
+
             </div>
+
           </div>
+
         </div>
+
       )}
 
+
+
       {/* Header Button for Settings */}
+
       <button
+
         onClick={() => setShowApiModal(true)}
+
         className="fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-2.5 bg-white/95 backdrop-blur-md rounded-xl shadow-lg border border-orange-100 hover:bg-orange-50 hover:border-orange-200 hover:shadow-xl transition-all duration-200"
-        title="Cáº¥u hÃ¬nh API Key"
+
+        title="Cấu hình API Key"
+
       >
+
         <Settings size={18} className="text-orange-600" />
-        <span className="text-orange-700 font-semibold text-sm hidden sm:inline">âš™ï¸ CÃ i Ä‘áº·t API Key</span>
+
+        <span className="text-orange-700 font-semibold text-sm hidden sm:inline">⚙Đ Cài đặt API Key</span>
+
       </button>
 
+
+
       {/* Sidebar (Desktop) */}
+
       <div className="hidden lg:block h-screen sticky top-0 z-20">
+
         {renderSidebar()}
+
       </div>
+
+
 
       {/* Main Content */}
+
       <div className="flex-1 p-4 lg:p-8 flex flex-col h-screen overflow-hidden relative">
 
+
+
         {/* Mobile Header */}
+
         <div className="lg:hidden mb-4 bg-gradient-to-r from-white to-sky-50 p-4 rounded-xl shadow-lg border border-sky-100 flex flex-col gap-2">
+
           <div className="flex justify-between items-center">
+
             <span className="ml-3 font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-orange-600 to-indigo-600 text-xl tracking-tight" style={{ fontFamily: 'Nunito, sans-serif' }}>
-              SKKN 2026 PRO
+
+              SKKN 2026 PRO V2
+
             </span>
+
             <span className="text-xs bg-orange-100 text-orange-700 px-3 py-1 rounded-full font-medium">
-              {currentStepsInfo[state.step < COMPLETED_STEP_ID ? state.step : COMPLETED_STEP_ID - 1]?.label || "SKKN 2026 PRO"}
+
+              {currentStepsInfo[state.step < COMPLETED_STEP_ID ? state.step : COMPLETED_STEP_ID - 1]?.label || "SKKN 2026 PRO V2"}
+
             </span>
+
           </div>
-          <p className="text-xs text-orange-700 font-medium">âœ¨ Trá»£ lÃ½ viáº¿t SKKN thÃ´ng minh</p>
+
+          <p className="text-xs text-orange-700 font-medium">✨ Trợ lý viết SKKN thông minh</p>
+
         </div>
 
+
+
         {state.error && (() => {
+
           const errorInfo = getFriendlyErrorMessage({ message: state.error });
+
           return (
+
             <div className="bg-gradient-to-r from-red-50 to-orange-50 border border-red-200 rounded-xl p-5 mb-4 shadow-sm">
+
               {/* Header */}
+
               <div className="flex items-start gap-3 mb-3">
+
                 <div className="flex-shrink-0 w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+
                   <AlertTriangle className="w-5 h-5 text-red-600" />
+
                 </div>
+
                 <div className="flex-1">
+
                   <h3 className="font-bold text-red-800 text-lg">{errorInfo.title}</h3>
+
                   <p className="text-red-700 text-sm mt-1">{errorInfo.message}</p>
+
                 </div>
+
               </div>
+
+
 
               {/* Suggestions */}
+
               <div className="bg-white/70 rounded-lg p-4 mt-3 border border-red-100">
-                <p className="text-sm font-semibold text-gray-700 mb-2">ðŸ’¡ Gá»£i Ã½ kháº¯c phá»¥c:</p>
+
+                <p className="text-sm font-semibold text-gray-700 mb-2">💡 Gợi ý khắc phục:</p>
+
                 <ul className="space-y-2">
+
                   {errorInfo.suggestions.map((suggestion, index) => (
+
                     <li key={index} className="text-sm text-gray-600 flex items-start gap-2">
-                      <span className="text-gray-400">â€¢</span>
+
+                      <span className="text-gray-400">•</span>
+
                       {suggestion}
+
                     </li>
+
                   ))}
+
                 </ul>
+
               </div>
 
-              {/* HÆ°á»›ng dáº«n thao tÃ¡c cho ngÆ°á»i dÃ¹ng */}
+
+
+              {/* Hướng dẫn thao tác cho ngưĐi dùng */}
+
               {state.step > GenerationStep.INPUT_FORM && (
+
                 <div className="bg-gradient-to-r from-orange-50 to-emerald-50 rounded-lg p-4 mt-3 border border-orange-200">
-                  <p className="text-sm font-bold text-orange-800 mb-2">ðŸ“‹ Báº¡n cÃ³ 2 lá»±a chá»n:</p>
+
+                  <p className="text-sm font-bold text-orange-800 mb-2">📋 Bạn có 2 lựa chĐn:</p>
+
                   <div className="space-y-2">
+
                     <div className="flex items-start gap-2">
+
                       <span className="text-emerald-600 font-bold text-sm mt-0.5">1.</span>
+
                       <p className="text-sm text-gray-700">
-                        <span className="font-semibold text-emerald-700">Báº¥m "ðŸ”„ Thá»­ láº¡i (Ä‘á»•i key)"</span> - App sáº½ tá»± Ä‘á»™ng chuyá»ƒn sang API key dá»± phÃ²ng vÃ  tiáº¿p tá»¥c cháº¡y ngay, khÃ´ng máº¥t dá»¯ liá»‡u.
+
+                        <span className="font-semibold text-emerald-700">Bấm "🔄 Thử lại (đổi key)"</span> - App sẽ tự động chuyển sang API key dự phòng và tiếp tục chạy ngay, không mất dữ liệu.
+
                       </p>
+
                     </div>
+
                     <div className="flex items-start gap-2">
+
                       <span className="text-sky-600 font-bold text-sm mt-0.5">2.</span>
+
                       <p className="text-sm text-gray-700">
-                        <span className="font-semibold text-sky-700">Báº¥m "ðŸ’¾ LÆ°u phiÃªn" á»Ÿ thanh bÃªn trÃ¡i</span> rá»“i táº¯t app. HÃ´m sau má»Ÿ láº¡i, API key sáº½ Ä‘Æ°á»£c reset vÃ  báº¡n tiáº¿p tá»¥c tá»« chá»— Ä‘Ã£ dá»«ng.
+
+                        <span className="font-semibold text-sky-700">Bấm "💾 Lưu phiên" ở thanh bên trái</span> rồi tắt app. Hôm sau mở lại, API key sẽ được reset và bạn tiếp tục từ chỗ đã dừng.
+
                       </p>
+
                     </div>
+
                   </div>
+
                 </div>
+
               )}
+
+
 
               {/* Action buttons */}
+
               <div className="flex flex-wrap gap-2 mt-4">
+
                 <button
+
                   onClick={() => setState(prev => ({ ...prev, error: null }))}
+
                   className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+
                 >
-                  âœ• ÄÃ³ng thÃ´ng bÃ¡o
+
+                  ✕ Đóng thông báo
+
                 </button>
+
                 <button
+
                   onClick={() => setShowApiModal(true)}
+
                   className="px-4 py-2 bg-sky-600 text-white rounded-lg text-sm font-medium hover:bg-sky-700 transition-colors"
+
                 >
-                  ðŸ”‘ Äá»•i API Key
+
+                  🔑 Đổi API Key
+
                 </button>
-                {/* ðŸ†• NÃºt Thá»­ láº¡i - xoay sang API key dá»± phÃ²ng vÃ  retry */}
+
+                {/* 🆕 Nút Thử lại - xoay sang API key dự phòng và retry */}
+
                 {state.step > GenerationStep.INPUT_FORM && (
+
                   <button
+
                     onClick={() => {
-                      // Xoay sang API key tiáº¿p theo trÆ°á»›c khi thá»­ láº¡i
+
+                      // Xoay sang API key tiếp theo trước khi thử lại
+
                       const rotation = apiKeyManager.rotateToNextKey('manual_retry');
+
                       let keyToUse = apiKey;
+
                       if (rotation.success && rotation.newKey) {
+
                         keyToUse = rotation.newKey;
+
                         setApiKey(keyToUse);
+
                         localStorage.setItem('gemini_api_key', keyToUse);
-                        console.log(`ðŸ”‘ ÄÃ£ xoay sang key má»›i: ${rotation.message} `);
+
+                        console.log(`🔑 Đã xoay sang key mới: ${rotation.message} `);
+
                       } else {
-                        // Náº¿u khÃ´ng cÃ³ key khÃ¡c, reset táº¥t cáº£ key vÃ  thá»­ láº¡i
+
+                        // Nếu không có key khác, reset tất cả key và thử lại
+
                         apiKeyManager.resetAllKeys();
+
                         const freshKey = apiKeyManager.getActiveKey();
+
                         if (freshKey) {
+
                           keyToUse = freshKey;
+
                           setApiKey(keyToUse);
+
                           localStorage.setItem('gemini_api_key', keyToUse);
-                          console.log('ðŸ”„ ÄÃ£ reset táº¥t cáº£ key vÃ  thá»­ láº¡i');
+
+                          console.log('🔄 Đã reset tất cả key và thử lại');
+
                         }
+
                       }
+
                       setState(prev => ({ ...prev, error: null }));
+
                       initializeGeminiChat(keyToUse, selectedModel);
-                      // KhÃ´i phá»¥c chat history trÆ°á»›c khi retry
+
+                      // Khôi phục chat history trước khi retry
+
                       const savedHistory = getChatHistory();
+
                       if (savedHistory.length > 0) {
+
                         setChatHistory(savedHistory);
+
                       }
+
                       setTimeout(() => {
+
                         generateNextSection();
+
                       }, 300);
+
                     }}
+
                     className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors flex items-center gap-2"
+
                   >
+
                     <RefreshCw size={16} />
-                    ðŸ”„ Thá»­ láº¡i (Ä‘á»•i key)
+
+                    🔄 Thử lại (đổi key)
+
                   </button>
+
                 )}
+
                 <a
+
                   href="https://ai.google.dev/gemini-api/docs/api-key"
+
                   target="_blank"
+
                   rel="noopener noreferrer"
+
                   className="px-4 py-2 bg-gray-600 text-white rounded-lg text-sm font-medium hover:bg-gray-700 transition-colors"
+
                 >
-                  ðŸ“– HÆ°á»›ng dáº«n láº¥y API Key
+
+                  📖 Hướng dẫn lấy API Key
+
                 </a>
+
               </div>
+
             </div>
+
           );
+
         })()}
 
+
+
         {state.step === GenerationStep.INPUT_FORM ? (
+
           <div className="flex-1 flex items-start justify-center overflow-y-auto">
+
             <SKKNForm
+
               userInfo={userInfo}
+
               onChange={handleUserChange}
+
               onSubmit={startGeneration}
+
               onManualSubmit={handleManualOutlineSubmit}
+
               isSubmitting={state.isStreaming}
+
               apiKey={apiKey}
+
               selectedModel={selectedModel}
+
               templateFileName={templateFileName}
+
               parsedTemplateSections={templateSectionsCount}
+
               onBackToUpload={() => setWizardStep(WizardStep.UPLOAD_TEMPLATE)}
+
             />
+
           </div>
+
         ) : (
+
           <div className="flex-1 flex flex-col min-h-0 relative">
+
             <DocumentPreview
+
               content={state.fullDocument}
+
               onUpdate={handleDocumentUpdate}
+
               // Only allow direct editing in the OUTLINE step and when not streaming
+
               isEditable={state.step === GenerationStep.OUTLINE && !state.isStreaming}
+
             />
+
+
 
             {/* Mobile Controls Floating */}
+
             <div className="lg:hidden absolute bottom-4 left-4 right-4 flex gap-2 shadow-lg">
+
               {!state.isStreaming && state.step < COMPLETED_STEP_ID && (
+
                 <Button onClick={generateNextSection} className="flex-1 shadow-xl">
-                  {state.step === GenerationStep.OUTLINE ? 'Chá»‘t & Tiáº¿p tá»¥c' : 'Viáº¿t tiáº¿p'}
+
+                  {state.step === GenerationStep.OUTLINE ? 'Chốt & Tiếp tục' : 'Viết tiếp'}
+
                 </Button>
+
               )}
+
               <Button onClick={exportToWord} variant="secondary" className="bg-white shadow-xl text-sky-700">
+
                 <Download size={20} />
+
               </Button>
+
             </div>
+
           </div>
+
         )}
+
       </div>
+
     </div>
+
   );
+
 };
 
+
+
 export default App;
+

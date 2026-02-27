@@ -124,7 +124,7 @@ export const ResultView: React.FC<ResultViewProps> = ({ exam, userAnswers, onRet
       <div className="space-y-6">
         {exam.parts.map((part, pIdx) => (
           <div key={part.id}>
-            <h3 className="font-bold text-xl text-slate-800 mb-4 px-2 border-l-4 border-blue-500">
+            <h3 className="font-bold text-xl text-slate-800 mb-4 px-2 border-l-4 border-orange-500">
               Phần {pIdx + 1}: {part.title}
             </h3>
             
@@ -192,7 +192,7 @@ export const ResultView: React.FC<ResultViewProps> = ({ exam, userAnswers, onRet
                                      <span className={match ? 'text-green-600 font-bold' : 'text-red-500 line-through'}>
                                        Bạn: {uVal ? 'Đ' : 'S'}
                                      </span>
-                                     <span className="text-blue-600 font-bold">
+                                     <span className="text-orange-600 font-bold">
                                        Đúng: {s.isCorrect ? 'Đ' : 'S'}
                                      </span>
                                    </div>
@@ -220,8 +220,8 @@ export const ResultView: React.FC<ResultViewProps> = ({ exam, userAnswers, onRet
                         )}
 
                         {q.explanation && q.type !== QuestionType.ESSAY && (
-                          <div className="mt-4 p-3 bg-blue-50/50 rounded border border-blue-100">
-                            <span className="font-bold text-blue-800 block mb-1">Giải thích:</span>
+                          <div className="mt-4 p-3 bg-orange-50/50 rounded border border-orange-100">
+                            <span className="font-bold text-orange-800 block mb-1">Giải thích:</span>
                             <p className="text-slate-700">{q.explanation}</p>
                           </div>
                         )}
