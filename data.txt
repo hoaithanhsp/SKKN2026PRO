@@ -1,0 +1,55 @@
+STT	Lĩnh vực	Nhóm	Mô tả
+1	Bồi dưỡng giáo viên	Giáo dục - Đào tạo	Các phương pháp, kinh nghiệm trong việc bồi dưỡng chuyên môn, nghiệp vụ cho giáo viên
+2	Chăm sóc nuôi dưỡng	Mầm non	Kinh nghiệm chăm sóc, nuôi dưỡng trẻ em tại các cơ sở giáo dục mầm non
+3	Chủ nhiệm	Quản lý lớp học	Kinh nghiệm công tác chủ nhiệm lớp, quản lý học sinh, xây dựng tập thể lớp
+4	Chuyển đổi số	Công nghệ - Giáo dục	Ứng dụng công nghệ số trong dạy học và quản lý giáo dục
+5	Cơ bản	Kỹ thuật	Kiến thức và kỹ năng cơ bản trong lĩnh vực kỹ thuật
+6	Cơ khí	Kỹ thuật công nghiệp	Kinh nghiệm giảng dạy và thực hành cơ khí
+7	Công đoàn	Tổ chức - Đoàn thể	Hoạt động công đoàn trong trường học, bảo vệ quyền lợi giáo viên
+8	Công nghệ công nghiệp	Kỹ thuật - Công nghệ	Giảng dạy và ứng dụng công nghệ công nghiệp
+9	Công nghệ nông nghiệp	Nông nghiệp - Công nghệ	Giảng dạy và ứng dụng công nghệ trong nông nghiệp
+10	Công nghệ thông tin	CNTT - Giáo dục	Ứng dụng CNTT trong dạy học, quản lý và các hoạt động giáo dục
+11	Công tác Đoàn, Đội	Tổ chức - Đoàn thể	Kinh nghiệm tổ chức hoạt động Đoàn Thanh niên, Đội Thiếu niên trong trường học
+12	Đạo đức	Giáo dục nhân cách	Giảng dạy môn Đạo đức, giáo dục phẩm chất đạo đức cho học sinh
+13	Địa lý	Khoa học xã hội	Phương pháp giảng dạy môn Địa lý hiệu quả
+14	Điện máy	Kỹ thuật điện	Kinh nghiệm giảng dạy và thực hành điện máy
+15	Giáo dục công dân	Giáo dục nhân cách	Phương pháp giảng dạy môn Giáo dục công dân, giáo dục pháp luật cho học sinh
+16	Giáo dục địa phương	Giáo dục - Địa phương	Tích hợp nội dung giáo dục địa phương vào chương trình học
+17	Giáo dục hướng nghiệp	Hướng nghiệp	Kinh nghiệm tư vấn, định hướng nghề nghiệp cho học sinh
+18	Giáo dục Kinh tế và Pháp luật	Kinh tế - Pháp luật	Giảng dạy kiến thức kinh tế và pháp luật cho học sinh THPT
+19	Giáo dục mẫu giáo, nhà trẻ	Mầm non	Phương pháp giáo dục trẻ mầm non, mẫu giáo và nhà trẻ
+20	Giáo dục nghề nghiệp	Hướng nghiệp - Dạy nghề	Kinh nghiệm giảng dạy và đào tạo nghề nghiệp cho học sinh
+21	Giáo dục quốc phòng và an ninh	Quốc phòng - An ninh	Giảng dạy môn Giáo dục quốc phòng và an ninh
+22	Giáo dục tập thể	Giáo dục nhân cách	Xây dựng tinh thần tập thể, kỹ năng làm việc nhóm cho học sinh
+23	Giáo dục thể chất	Thể dục - Thể thao	Phương pháp giảng dạy thể dục, rèn luyện sức khỏe cho học sinh
+24	Giáo dục thường xuyên	Giáo dục - Đào tạo	Kinh nghiệm giảng dạy và quản lý trong hệ thống giáo dục thường xuyên
+25	Giáo dục tiểu học	Tiểu học	Phương pháp giảng dạy và quản lý học sinh bậc tiểu học
+26	Hoá học	Khoa học tự nhiên	Phương pháp giảng dạy môn Hóa học, thí nghiệm thực hành
+27	Hoạt động trải nghiệm hướng nghiệp	Hướng nghiệp - Trải nghiệm	Tổ chức các hoạt động trải nghiệm thực tế gắn với định hướng nghề nghiệp
+28	Kế toán	Kinh tế - Tài chính	Giảng dạy kế toán, quản lý tài chính trong trường học
+29	Khoa học	Khoa học tự nhiên	Phương pháp giảng dạy môn Khoa học ở bậc tiểu học
+30	Kỹ năng sống	Giáo dục nhân cách	Giáo dục kỹ năng sống, kỹ năng mềm cho học sinh
+31	Lịch sử	Khoa học xã hội	Phương pháp giảng dạy môn Lịch sử hiệu quả, sáng tạo
+32	Mỹ thuật	Nghệ thuật	Phương pháp giảng dạy môn Mỹ thuật, phát triển năng khiếu thẩm mỹ
+33	Ngoại ngữ	Ngôn ngữ	Phương pháp giảng dạy ngoại ngữ (Anh, Pháp, Nhật...) hiệu quả
+34	Ngữ văn	Ngôn ngữ - Văn học	Phương pháp giảng dạy môn Ngữ văn, phát triển năng lực đọc viết
+35	Nhân viên	Hành chính - Nhân sự	Kinh nghiệm công tác của nhân viên hành chính, y tế, bảo vệ trong trường học
+36	Phong trào trường học	Tổ chức - Phong trào	Tổ chức các phong trào thi đua, hoạt động ngoại khóa trong trường học
+37	Phương pháp dạy học	Sư phạm	Đổi mới phương pháp dạy học tích cực, hiệu quả
+38	Quản lý	Quản lý giáo dục	Kinh nghiệm quản lý trường học, quản lý chuyên môn
+39	Sinh học	Khoa học tự nhiên	Phương pháp giảng dạy môn Sinh học, thực hành thí nghiệm
+40	Sức khỏe học đường	Y tế - Sức khỏe	Chăm sóc sức khỏe học sinh, phòng chống bệnh học đường
+41	Tâm lý học đường	Tâm lý - Giáo dục	Hỗ trợ tâm lý học sinh, phòng ngừa và can thiệp các vấn đề tâm lý
+42	Tham vấn học đường	Tâm lý - Tư vấn	Kinh nghiệm tư vấn, hỗ trợ học sinh và phụ huynh trong môi trường học đường
+43	Thanh tra	Quản lý - Kiểm tra	Kinh nghiệm công tác thanh tra, kiểm tra trong giáo dục
+44	Thiết bị dạy học	Cơ sở vật chất	Sử dụng và sáng tạo thiết bị dạy học hiệu quả
+45	Thủ công	Nghệ thuật - Kỹ năng	Phương pháp giảng dạy thủ công, rèn luyện kỹ năng khéo léo cho học sinh
+46	Thư viện	Hành chính - Thư viện	Quản lý và phát triển thư viện trường học, khuyến đọc
+47	Tiếng Việt	Ngôn ngữ	Phương pháp giảng dạy môn Tiếng Việt ở bậc tiểu học
+48	Tin học	CNTT - Giáo dục	Phương pháp giảng dạy môn Tin học, lập trình cho học sinh
+49	Toán	Khoa học tự nhiên	Phương pháp giảng dạy môn Toán, phát triển tư duy logic
+50	Tự chọn	Đa lĩnh vực	Các chủ đề tự chọn theo nhu cầu và điều kiện của nhà trường
+51	Tự nhiên xã hội	Khoa học tổng hợp	Phương pháp giảng dạy môn Tự nhiên và Xã hội ở bậc tiểu học
+52	Văn phòng	Hành chính	Kinh nghiệm công tác văn phòng, hành chính trong trường học
+53	Văn thư	Hành chính	Kinh nghiệm công tác văn thư, lưu trữ hồ sơ trong trường học
+54	Vật lý	Khoa học tự nhiên	Phương pháp giảng dạy môn Vật lý, thí nghiệm thực hành

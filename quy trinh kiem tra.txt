@@ -1,0 +1,388 @@
+Kiểm Tra Trùng Lặp (Nâng Cấp - Real-time Database)
+
+🔍 QUY TRÌNH KIỂM TRA 3 LỚP:
+
+Lớp 1: Database Nội Bộ (Offline)
+
+SO SÁNH với DATABASE TÍCH HỢP SẴN:
+- Nhóm đề tài: [Công nghệ/Phương pháp/Quản lý/Bồi dưỡng/Mới nổi]
+- Độ trùng lặp: [Cao/Trung bình/Thấp]
+- Số lượng đề tài tương tự ước tính: [X đề tài]
+
+Lớp 2: Tìm Kiếm Online Thời Gian Thực (Real-time)
+
+Sử dụng googleSearch tool để tìm kiếm:
+
+// Tìm kiếm trên Google với từ khóa cụ thể
+googleSearch({
+  query: "[Tên đề tài] SKKN site:*.edu.vn OR site:*.gov.vn",
+  type: "webpage",
+  language: "vi",
+  freshness: "py" // Trong vòng 1 năm
+})
+
+// Tìm kiếm trên các trang giáo dục
+googleSearch({
+  query: "[Tên đề tài] sáng kiến kinh nghiệm",
+  type: "webpage", 
+  language: "vi"
+})
+
+// Tìm kiếm học thuật
+googleSearch({
+  query: "[Tên đề tài] giáo dục",
+  type: "scholar",
+  language: "vi"
+})
+
+Lớp 3 : Kiểm Tra Các Website Chuyên Ngành
+
+Tự động quét các nguồn uy tín :
+
+
+
+
+
+Cổng Thông Tin SKKN Bộ GD&ĐT
+
+
+
+
+
+URL: https://skkn.moet.gov.vn
+
+
+
+Tìm kiếm : Đề tài đã được công nhận cấp Quốc gia
+
+
+
+Thư Viện SKKN Các Sở GD&ĐT
+
+
+
+
+
+Tìm kiếm trên 63 tỉnh thành
+
+
+
+Pattern: site: sgd[tên-tỉnh].gov.vn [tên đề tài]
+
+
+
+Tạp Chí Giáo Dục
+
+
+
+
+
+tapchigiaoduc.edu.vn
+
+
+
+giaoduc.net.vn
+
+
+
+giaoducthoidai.vn
+
+
+
+Kho Tài Liệu Giáo Viên
+
+
+
+
+
+violet.vn
+
+
+
+thuvienvatly.com
+
+
+
+tailieu.vn
+
+
+
+123doc.net
+
+
+
+Google Scholar Vietnam
+
+
+
+
+
+Tìm kiếm các bài báo khoa học có liên quan
+
+OUTPUT MẪU:
+
+🔍 KẾT QUẢ KIỂM TRA TRÙNG LẶP (3 LỚP):
+
+📊 LỚP 1 - DATABASE NỘI BỘ:
+- Nhóm: [Công nghệ/Phương pháp/...]
+- Độ trùng lặp: [Cao/Trung bình/Thấp]
+- Ước tính: [X] đề tài tương tự
+
+---
+
+🌐 LỚP 2 - TÌM KIẾM ONLINE (Real-time):
+
+✅ Tìm thấy [Y] kết quả liên quan:
+
+1. "[Tên đề tài tương tự 1]"
+   📍 Nguồn: [Website]
+   📅 Năm: [Năm]
+   🔗 Link: [URL]
+   📊 Độ giống: [X]%
+   
+2. "[Tên đề tài tương tự 2]"
+   📍 Nguồn: [Website]
+   📅 Năm: [Năm]
+   🔗 Link: [URL]
+   📊 Độ giống: [X]%
+
+[...liệt kê top 5-10 kết quả]
+
+---
+
+🎓 LỚP 3 - WEBSITE CHUYÊN NGÀNH:
+
+✅ Cổng SKKN Bộ GD&ĐT:
+- Tìm thấy [Z] đề tài liên quan
+- Đề tài gần nhất: "[Tên]" - [Tác giả] - [Năm]
+
+✅ Sở GD&ĐT các tỉnh:
+- [Tỉnh A]: [X] đề tài
+- [Tỉnh B]: [Y] đề tài
+- [Tỉnh C]: [Z] đề tài
+
+✅ Tạp chí Giáo dục:
+- Tìm thấy [A] bài viết liên quan
+- Bài gần nhất: "[Tiêu đề]" - [Tác giả] - [Ngày]
+
+✅ Google Scholar:
+- [B] bài báo khoa học liên quan
+- Bài được trích dẫn nhiều nhất: "[Tiêu đề]"
+
+---
+
+⚠️ ĐÁNH GIÁ TỔNG HỢP:
+
+🔴 Mức độ trùng lặp: [RẤT CAO/CAO/TRUNG BÌNH/THẤP/RẤT THẤP]
+
+📈 Phân tích chi tiết:
+- Đề tài này đã xuất hiện [X] lần trên Internet
+- Có [Y] đề tài gần giống (>70% tương đồng)
+- Có [Z] đề tài tương tự (50-70% tương đồng)
+- Đề tài gần nhất được công bố: [Thời gian]
+
+💡 KẾT LUẬN:
+[Nếu trùng lặp cao]
+⚠️ CẢNH BÁO: Đề tài này RẤT PHỔ BIẾN! 
+- Đã có ít nhất [X] giáo viên thực hiện đề tài tương tự
+- Nguy cơ bị đánh giá là "không mới" rất cao
+- Cần có điểm ĐỘT PHÁ rõ ràng để nổi bật
+
+[Nếu trùng lặp thấp]
+✅ TÍCH CỰC: Đề tài khá MỚI!
+- Chỉ có [X] đề tài tương tự (ít cạnh tranh)
+- Cơ hội đạt giải cao nếu thực hiện tốt
+- Đây là hướng đi đáng để đầu tư
+
+---
+
+🔗 LINK THAM KHẢO:
+[Danh sách 5-10 link quan trọng nhất để người dùng tham khảo]
+
+🛠️ CÔNG NGHỆ TRIỂN KHAI :
+
+// Pseudo-code cho tính năng này
+
+async function checkDuplicateAdvanced(tenDeTai) {
+  // Bước 1: Kiểm tra database nội bộ
+  const layer1 = checkInternalDatabase(tenDeTai);
+  
+  // Bước 2: Tìm kiếm online real-time
+  const layer2Results = await Promise.all([
+    googleSearch({
+      query: `${tenDeTai} SKKN site:*.edu.vn OR site:*.gov.vn`,
+      type: "webpage",
+      language: "vi",
+      freshness: "py"
+    }),
+    googleSearch({
+      query: `${tenDeTai} sáng kiến kinh nghiệm`,
+      type: "webpage",
+      language: "vi"
+    }),
+    googleSearch({
+      query: `${tenDeTai} giáo dục`,
+      type: "scholar",
+      language: "vi"
+    })
+  ]);
+  
+  // Bước 3: Quét các website chuyên ngành
+  const layer3Results = await Promise.all([
+    searchWebsite("skkn.moet.gov.vn", tenDeTai),
+    searchWebsite("tapchigiaoduc.edu.vn", tenDeTai),
+    searchWebsite("violet.vn", tenDeTai),
+    searchWebsite("thuvienvatly.com", tenDeTai),
+    // ... các website khác
+  ]);
+  
+  // Phân tích và tổng hợp kết quả
+  const analysis = analyzeResults(layer1, layer2Results, layer3Results);
+  
+  // Tính điểm trùng lặp
+  const duplicateScore = calculateDuplicateScore(analysis);
+  
+  // Đề xuất hành động
+  const recommendations = generateRecommendations(duplicateScore);
+  
+  return {
+    layer1,
+    layer2: layer2Results,
+    layer3: layer3Results,
+    analysis,
+    duplicateScore,
+    recommendations
+  };
+}
+
+Bước 1.3: Chấm Điểm
+
+ĐIỂM SỐ:
+- Độ cụ thể: [X/25 điểm] → [Lý do]
+- Tính mới: [X/30 điểm] → [Lý do]
+- Tính khả thi: [X/25 điểm] → [Lý do]
+- Độ rõ ràng: [X/20 điểm] → [Lý do]
+
+TỔNG: [X/100 điểm]
+
+ĐÁNH GIÁ CHUNG:
+- [90-100]: Xuất sắc
+- [75-89]: Tốt
+- [60-74]: Khá
+- [40-59]: Trung bình
+- [<40]: Cần cải thiện nhiều
+
+Bước 1.4: Đề Xuất Cải Thiện
+
+VẤN ĐỀ CHÍNH:
+1. [Vấn đề 1]
+2. [Vấn đề 2]
+3. [Vấn đề 3]
+
+ĐỀ XUẤT CẢI THIỆN:
+1. [Giải pháp 1] → [Ví dụ cụ thể]
+2. [Giải pháp 2] → [Ví dụ cụ thể]
+3. [Giải pháp 3] → [Ví dụ cụ thể]
+
+Bước 1.5 : Gợi Ý Tên Thay Thế
+
+GỢI Ý 5 TÊN ĐỀ TÀI THAY THẾ:
+
+1. [Tên mới 1]
+   - Điểm mạnh: [X]
+   - Điểm số dự kiến: [X/100]
+   - Lý do nên chọn: [X]
+
+2. [Tên mới 2]
+   - Điểm mạnh: [X]
+   - Điểm số dự kiến: [X/100]
+   - Lý do nên chọn: [X]
+
+3. [Tên mới 3]
+   - Điểm mạnh: [X]
+   - Điểm số dự kiến: [X/100]
+   - Lý do nên chọn: [X]
+
+4. [Tên mới 4]
+   - Điểm mạnh: [X]
+   - Điểm số dự kiến: [X/100]
+   - Lý do nên chọn: [X]
+
+5. [Tên mới 5]
+   - Điểm mạnh: [X]
+   - Điểm số dự kiến: [X/100]
+   - Lý do nên chọn: [X]
+
+---
+
+💡 GỢI Ý ĐỀ TÀI LIÊN QUAN (Từ nhóm "Đề tài mới nổi"):
+- [Đề tài 1]: [Mô tả ngắn]
+- [Đề tài 2]: [Mô tả ngắn]
+- [Đề tài 3]: [Mô tả ngắn]
+
+Output mẫu:
+
+🔍 KẾT QUẢ PHÂN TÍCH TÊN ĐỀ TÀI:
+
+📝 Tên đề tài: "[Tên đề tài người dùng nhập]"
+
+---
+
+📊 PHÂN TÍCH CẤU TRÚC:
+✅ Hành động: [Có/Không] - [Từ khóa]
+✅ Công cụ: [Có/Không] - [Từ khóa]
+✅ Đối tượng: [Có/Không] - [Từ khóa]
+✅ Phạm vi: [Có/Không] - [Từ khóa]
+✅ Độ dài: [X từ] - [Đánh giá]
+
+---
+
+⚠️ KIỂM TRA TRÙNG LẶP:
+- Nhóm: [Công nghệ/Phương pháp/...]
+- Độ trùng lặp: [Cao/Trung bình/Thấp]
+- Ước tính: Có khoảng [X] đề tài tương tự
+
+[Nếu cao] ⚠️ Cảnh báo: Đề tài này rất phổ biến, cần có điểm mới rõ ràng!
+
+---
+
+📈 CHẤM ĐIỂM:
+- Độ cụ thể: [X]/25 điểm - [Lý do]
+- Tính mới: [X]/30 điểm - [Lý do]
+- Tính khả thi: [X]/25 điểm - [Lý do]
+- Độ rõ ràng: [X]/20 điểm - [Lý do]
+
+🎯 TỔNG ĐIỂM: [X]/100 - [Xuất sắc/Tốt/Khá/Trung bình/Cần cải thiện]
+
+---
+
+🔧 VẤN ĐỀ & ĐỀ XUẤT:
+
+❌ Vấn đề 1: [Mô tả]
+   ✅ Giải pháp: [Cách sửa cụ thể]
+
+❌ Vấn đề 2: [Mô tả]
+   ✅ Giải pháp: [Cách sửa cụ thể]
+
+---
+
+💡 5 TÊN ĐỀ TÀI THAY THẾ:
+
+1️⃣ [Tên mới 1]
+   💪 Điểm mạnh: [X]
+   📊 Điểm dự kiến: [X]/100
+   ⭐ Lý do: [X]
+
+2️⃣ [Tên mới 2]
+   💪 Điểm mạnh: [X]
+   📊 Điểm dự kiến: [X]/100
+   ⭐ Lý do: [X]
+
+[...tương tự cho 3, 4, 5]
+
+---
+
+🌟 GỢI Ý ĐỀ TÀI LIÊN QUAN (Mới nổi, ít cạnh tranh):
+- [Đề tài 1]: [Mô tả]
+- [Đề tài 2]: [Mô tả]
+- [Đề tài 3]: [Mô tả]

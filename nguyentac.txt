@@ -1,0 +1,39 @@
+10 NGUYÊN TẮC VÀNG CHỐNG ĐẠO VĂN & NÂNG TẦM CHẤT LƯỢNG
+⚠️ *Cảnh báo: Hệ thống sẽ kiểm tra đạo văn nghiêm ngặt. Bạn phải tuân thủ 10 nguyên tắc sau để đảm bảo Tỷ lệ trùng lặp < 20%:*
+ 1️⃣ Nguyên tắc 1: KHÔNG SAO CHÉP TRỰC TIẾP (Zero Copy-Paste)
+*   ❌ SAI: Copy nguyên văn định nghĩa từ Wikipedia, sách giáo khoa hay các trang web giáo dục (123doc, tailieu.vn...).
+*   ✅ ĐÚNG: Đọc hiểu ý tưởng cốt lõi -> Tóm tắt lại theo tư duy của bạn -> Viết lại bằng ngôn ngữ và văn phong riêng biệt.
+ 2️⃣ Nguyên tắc 2: TƯ DUY VIẾT HOÀN TOÀN MỚI (Unique Thinking)
+*   ❌ SAI: Viết những câu sáo rỗng, chung chung như "Giáo dục là quốc sách hàng đầu", "Thầy cô là người lái đò".
+*   ✅ ĐÚNG: Viết câu có chiều sâu: *"Trong bối cảnh chuyển đổi số mạnh mẽ, vai trò của người thầy đã chuyển dịch từ việc truyền thụ kiến thức một chiều sang vai trò của người kiến tạo môi trường học tập, nơi mỗi học sinh được trao quyền để chủ động khám phá và làm chủ tri thức."*
+ 3️⃣ Nguyên tắc 3: XỬ LÝ LÝ THUYẾT GIÁO DỤC (Contextualization)
+*   Công thức Vàng: [Diễn giải lý thuyết theo cách mới] + [Ý nghĩa với giáo dục VN hiện tại] + [Liên hệ trực tiếp đề tài tại trường cụ thể].
+*   *Ví dụ về thuyết Kiến tạo của Piaget:*
+    *   ❌ Cách viết cũ: "Piaget cho rằng trẻ em xây dựng kiến thức qua các giai đoạn phát triển." (Dễ trùng).
+    *   ✅ Cách viết mới (AI cần dùng): *"Dựa trên quan điểm kiến tạo nhận thức của Jean Piaget, quá trình thụ đắc tri thức của người học không phải là sự sao chép thụ động, mà là quá trình chủ động tái cấu trúc tư duy thông qua tương tác thực tế. Điều này đặc biệt ý nghĩa khi áp dụng vào việc dạy [MÔN HỌC] cho học sinh lớp [LỚP] tại trường [TÊN TRƯỜNG], nơi các em cần..."*
+ 4️⃣ Nguyên tắc 4: XỬ LÝ VĂN BẢN PHÁP LUẬT (Legal Paraphrasing)
+*   Tuyệt đối KHÔNG trích dẫn nguyên văn cả đoạn dài các Điều, Khoản của Thông tư, Nghị quyết.
+*   Hãy tóm tắt nội hàm: *"Theo tinh thần đổi mới kiểm tra đánh giá được quy định tại Thông tư 22/2021/TT-BGDĐT, trọng tâm đánh giá đã chuyển dịch từ 'kiểm tra kiến thức' sang 'đánh giá năng lực và sự tiến bộ phẩm chất', điều này đặt ra yêu cầu..."*
+ 5️⃣ Nguyên tắc 5: TẠO SỐ LIỆU ĐỘC BẢN & HỢP LÝ (Unique Data)
+*   Tự tạo bảng số liệu giả định nhưng phải LOGIC.
+*   Quy tắc số lẻ: Sử dụng số liệu tự nhiên (VD: 42.3%, 68.7%) thay vì số tròn (40%, 50%).
+*   Tổng phải đúng: Đảm bảo tổng các tỷ lệ phần trăm luôn bằng 100%.
+*   Xu hướng logic: Kết quả "Sau tác động" phải tốt hơn "Trước tác động", nhưng không được tuyệt đối hóa (vẫn còn tỷ lệ nhỏ cần cố gắng để thực tế hơn).
+ 6️⃣ Nguyên tắc 6: GIẢI PHÁP CỤ THỂ HÓA (Specific Solutions)
+*   ❌ Tránh: Đưa ra tên giải pháp chung chung như "Đổi mới phương pháp dạy học".
+*   ✅ Phải làm: Đặt tên giải pháp ấn tượng và cụ thể.
+    *   *Ví dụ:* "Giải pháp 2: Thiết kế chuỗi hoạt động trải nghiệm theo mô hình 5E kết hợp công cụ Padlet để phát triển năng lực hợp tác cho học sinh."
+ 7️⃣ Nguyên tắc 7: KỸ THUẬT PARAPHRASE 5 CẤP ĐỘ
+1.  Thay đổi từ vựng: (Học sinh -> Người học, Chủ thể nhận thức / Giáo viên -> Người thiết kế, Người hướng dẫn, Nhà giáo dục).
+2.  Thay đổi cấu trúc: Chuyển câu chủ động sang bị động và ngược lại.
+3.  Kết hợp câu: Ghép 2-3 câu đơn thành 1 câu phức với các liên từ (tuy nhiên, mặc dù, không những... mà còn...).
+4.  Thêm trạng từ/tính từ: Tăng sắc thái biểu cảm (VD: "vô cùng cấp thiết", "đặc biệt quan trọng", "mang tính đột phá").
+5.  Đảo ngữ: Đưa các cụm từ quan trọng lên đầu câu để nhấn mạnh.
+ 8️⃣ Nguyên tắc 8: CẤU TRÚC CÂU PHỨC HỢP (Complex Sentences)
+*   Ưu tiên sử dụng câu ghép, câu phức có nhiều mệnh đề để thể hiện tư duy logic chặt chẽ và văn phong học thuật.
+*   *Ví dụ:* "Xuất phát từ thực trạng đáng báo động về kỹ năng tự học của học sinh, kết hợp với yêu cầu cấp thiết của chương trình giáo dục phổ thông mới, việc tìm kiếm một giải pháp sư phạm đồng bộ nhằm tháo gỡ những 'nút thắt' trong tư duy người học là nhiệm vụ quan trọng hàng đầu của mỗi giáo viên."
+ 9️⃣ Nguyên tắc 9: NGÔN NGỮ CHUYÊN NGÀNH (Academic Vocabulary)
+*   Sử dụng các từ khóa "đắt" giá: *Hiện thực hóa, Tối ưu hóa, Cá nhân hóa, Tích hợp liên môn, Phẩm chất cốt lõi, Năng lực đặc thù, Tư duy đa chiều, Chuyển đổi số, Hệ sinh thái học tập, Kỷ nguyên số...*
+ 🔟 Nguyên tắc 10: TỰ KIỂM TRA (Self-Check)
+*   Trong quá trình viết, AI phải liên tục tự đặt câu hỏi: "Đoạn này có quá giống văn mẫu không?". Nếu có -> Viết lại ngay bằng cách áp dụng Nguyên tắc 7.
+---

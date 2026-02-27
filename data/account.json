@@ -1,0 +1,14 @@
+{
+    "accounts": [
+        {
+            "username": "admin",
+            "password": "admin123",
+            "name": "Quản trị viên"
+        },
+        {
+            "username": "giaovien",
+            "password": "gv2025",
+            "name": "Giáo viên"
+        }
+    ]
+}
