@@ -209,7 +209,7 @@ export const TemplateUploadStep: React.FC<Props> = ({
                     </div>
                     {/* Title with shimmer gradient */}
                     <h1 className="text-4xl md:text-5xl font-black mb-3 hero-title tracking-tight" style={{ fontFamily: 'Nunito, sans-serif' }}>
-                        SKKN 2026 PRO V2
+                        SKKN 2026 PRO
                     </h1>
                     {/* PRO Badge */}
                     <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-gradient-to-r from-orange-100 to-amber-100 border border-orange-200 mb-3">
@@ -427,7 +427,7 @@ export const TemplateUploadStep: React.FC<Props> = ({
 
                 {/* Footer text */}
                 <p className="text-center text-sm font-bold mt-6" style={{ background: 'linear-gradient(135deg, #ea580c, #dc2626, #f59e0b)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', filter: 'drop-shadow(0 1px 3px rgba(234,88,12,0.18))' }}>
-                    SKKN 2026 PRO V2 • TRỢ LÝ VIẾT MỌI MẪU SKKN CÁC SỞ
+                    SKKN 2026 PRO • TRỢ LÝ VIẾT MỌI MẪU SKKN CÁC SỞ
                 </p>
             </div>
         </div>

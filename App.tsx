@@ -4600,7 +4600,7 @@ Tổ: [Tổ chuyên môn]
 
             <Wand2 className="h-6 w-6 text-orange-500" />
 
-            SKKN 2026 PRO V2
+            SKKN 2026 PRO
 
           </h1>
 
@@ -5244,13 +5244,13 @@ Tổ: [Tổ chuyên môn]
 
             <span className="ml-3 font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-orange-600 to-indigo-600 text-xl tracking-tight" style={{ fontFamily: 'Nunito, sans-serif' }}>
 
-              SKKN 2026 PRO V2
+              SKKN 2026 PRO
 
             </span>
 
             <span className="text-xs bg-orange-100 text-orange-700 px-3 py-1 rounded-full font-medium">
 
-              {currentStepsInfo[state.step < COMPLETED_STEP_ID ? state.step : COMPLETED_STEP_ID - 1]?.label || "SKKN 2026 PRO V2"}
+              {currentStepsInfo[state.step < COMPLETED_STEP_ID ? state.step : COMPLETED_STEP_ID - 1]?.label || "SKKN 2026 PRO"}
 
             </span>
 

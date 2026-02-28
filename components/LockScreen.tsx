@@ -42,7 +42,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onLogin }) => {
           <div className="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center mx-auto mb-4">
             <Lock className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-white">SKKN 2026 PRO V2</h1>
+          <h1 className="text-2xl font-bold text-white">SKKN 2026 PRO</h1>
           <p className="text-sky-100 text-sm mt-1">Đăng nhập để sử dụng ứng dụng</p>
         </div>
 
