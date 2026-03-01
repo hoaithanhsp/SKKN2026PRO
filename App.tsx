@@ -2264,7 +2264,35 @@ CẤU TRÚC SKKN CHUẨN (ĐP DỤNG KHI KHÔNG CÓ MẪU RIÊNG):
 
 
 
-ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ
+ĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐĐ${(() => {
+          const supplementary: string[] = [];
+          if (userInfo.textbook) supplementary.push(`- 📚 Sách giáo khoa: "${userInfo.textbook}" → BẮT BUỘC mọi ví dụ, bài học minh họa phải theo đúng bộ sách "${userInfo.textbook}", TUYỆT ĐỐI KHÔNG ĐƯỢC dùng bộ sách khác`);
+          if (userInfo.researchSubjects) supplementary.push(`- 👥 Đối tượng nghiên cứu: "${userInfo.researchSubjects}" → BẮT BUỘC đề cập chính xác thông tin này`);
+          if (userInfo.timeframe) supplementary.push(`- 📅 Thời gian thực hiện: "${userInfo.timeframe}" → BẮT BUỘC sử dụng đúng mốc thời gian này`);
+          if (userInfo.applyAI) supplementary.push(`- 🤖 Ứng dụng AI/Công nghệ: "${userInfo.applyAI}" → BẮT BUỘC tích hợp các công nghệ này vào giải pháp`);
+          if (userInfo.focus) supplementary.push(`- 🎯 Đặc thù/Trọng tâm đề tài: "${userInfo.focus}" → BẮT BUỘC phản ánh trọng tâm này trong dàn ý`);
+
+          if (supplementary.length === 0) return '';
+
+          return `
+═══════════════════════════════════════════
+🚨🚨🚨 THÔNG TIN BỔ SUNG - BẮT BUỘC SỬ DỤNG CHÍNH XÁC 🚨🚨🚨
+═══════════════════════════════════════════
+
+⚠️ CẢNH BÁO NGHIÊM NGẶT: Giáo viên đã khai báo các thông tin bổ sung sau.
+BẠN PHẢI SỬ DỤNG CHÍNH XÁC từng thông tin, TUYỆT ĐỐI KHÔNG ĐƯỢC:
+- Thay thế bằng thông tin khác
+- Bịa đặt hoặc tự ý thay đổi
+- Bỏ qua bất kỳ thông tin nào
+
+${supplementary.join('\n')}
+
+🚫 VÍ DỤ LỖI NGHIÊM TRỌNG: Nếu giáo viên ghi sách "Kết nối tri thức" mà bạn viết "Cánh diều" → SAI HOÀN TOÀN!
+✅ PHẢI dùng ĐÚNG NGUYÊN VĂN thông tin giáo viên đã cung cấp.
+`;
+        })()}
+
+═══════════════════════════════════════════
 
 YÊU CẦU DÀN Đ(NGẮN GỌN - CHỈ ĐẦU MỤC):
 
@@ -2710,7 +2738,7 @@ Môn: ${userInfo.subject} - Lớp: ${userInfo.grade} - Cấp: ${userInfo.level}
 
 TrưĐng: ${userInfo.school}, ${userInfo.location}
 
-SGK: ${userInfo.textbook}
+SGK: ${userInfo.textbook} (🚨 BẮT BUỘC dùng đúng bộ sách này, KHÔNG dùng bộ sách khác)
 
 CSVC: ${userInfo.facilities}
 
@@ -2890,7 +2918,7 @@ Môn: ${userInfo.subject} - Lớp: ${userInfo.grade} - Cấp: ${userInfo.level}
 
 TrưĐng: ${userInfo.school}, ${userInfo.location}
 
-SGK: ${userInfo.textbook}
+SGK: ${userInfo.textbook} (🚨 BẮT BUỘC dùng đúng bộ sách này, KHÔNG dùng bộ sách khác)
 
               Công nghệ / AI: ${userInfo.applyAI}
 
@@ -3034,7 +3062,7 @@ ${state.fullDocument.substring(0, 3000)}
 
                  - Có khung "KẾT THÚC GIẢI PHĐP" ở cuối.
 
-              4. Phải có VĐ DỤ MINH HỌA cụ thể theo SGK ${userInfo.textbook}.
+              4. Phải có VĐ DỤ MINH HỌA cụ thể theo SGK ${userInfo.textbook} (🚨 ĐÚNG bộ sách này, KHÔNG dùng bộ sách khác).
 
               
 
@@ -3116,7 +3144,7 @@ ${state.fullDocument.substring(0, 3000)}
 
                  - Có khung "KẾT THÚC GIẢI PHĐP" ở cuối.
 
-              4. Phải có VĐ DỤ MINH HỌA cụ thể theo SGK ${userInfo.textbook}.
+              4. Phải có VĐ DỤ MINH HỌA cụ thể theo SGK ${userInfo.textbook} (🚨 ĐÚNG bộ sách này, KHÔNG dùng bộ sách khác).
 
               
 
