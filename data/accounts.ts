@@ -2,6 +2,7 @@
 export const accounts = [
     { username: "admin", password: "admin123", name: "Quản trị viên" },
     { username: "duonghangdtntls@gmail.com", password: "SKKN100", name: "GV" },
+    { username: "huong12shh2012@gmail.com", password: "SKKN100", name: "GV" },
     { username: "Hphuoc1990@gmail.com", password: "SKKN100", name: "GV" },
     { username: "baubinna@gmail.com", password: "SKKN100", name: "GV" },
     { username: "slowsoftst@gmail.com", password: "SKKN100", name: "GV" },
@@ -47,6 +48,7 @@ export const accounts = [
     { username: "nguyenphuongnhi1807@gmail.com", password: "SKKN100", name: "GV" },
     { username: "minhchaudao1810@gmail.com", password: "SKKN100", name: "GV" },
 ];
+
 
 
 
